@@ -4,7 +4,7 @@ import { v4 as uuid } from "uuid";
 const speedsKmh = { walk: 4.5, train: 60, car: 35 };
 const defaultMode = "walk";
 
-// util fecha hoy en formato YYYY-MM-DD (hora local)
+// fecha YYYY-MM-DD
 function todayISO() {
   const d = new Date();
   const y = d.getFullYear();
@@ -75,37 +75,47 @@ const examplePlaces = [
 ];
 
 export const useItineraryStore = create((set, get) => ({
-  /* datos base */
   places: examplePlaces,
   selectedId: null,
-  days: [D0], // lista de días disponibles (YYYY-MM-DD)
-  selectedDate: D0, // día activo
+  days: [D0],
+  selectedDate: D0,
 
-  /* preferencias de moneda para conversión */
-  currency: { code: "USD", ratePerJPY: 0.0065 }, // 1 JPY -> 0.0065 USD aprox editable
+  // Preferencias moneda
+  currency: { code: "USD", ratePerJPY: 0.0065 },
 
-  /* setters básicos */
+  // UI global
+  ui: {
+    showMap: true,
+    financeOpen: true,
+    routeVisible: true,
+    basemap: "osm", // 'osm' | 'osmjp' | 'osmfr' | 'osmde'
+  },
+
+  // setters UI
+  setShowMap: (v) => set((s) => ({ ui: { ...s.ui, showMap: v } })),
+  toggleFinance: () =>
+    set((s) => ({ ui: { ...s.ui, financeOpen: !s.ui.financeOpen } })),
+  toggleRoute: () =>
+    set((s) => ({ ui: { ...s.ui, routeVisible: !s.ui.routeVisible } })),
+  setBasemap: (basemap) => set((s) => ({ ui: { ...s.ui, basemap } })),
+
   setSelected: (id) => set({ selectedId: id }),
   setSelectedDate: (date) => {
     const state = get();
-    if (!state.days.includes(date)) {
-      set({ days: [...state.days, date] });
-    }
+    if (!state.days.includes(date)) set({ days: [...state.days, date] });
     set({ selectedDate: date, selectedId: null });
   },
-
   addDay: (date) => {
     const { days } = get();
     if (!days.includes(date)) set({ days: [...days, date] });
     set({ selectedDate: date });
   },
   removeDay: (date) => {
-    const { days, places, selectedDate } = get();
+    const { days, places } = get();
     const remaining = days.filter((d) => d !== date);
-    const remainingPlaces = places.filter((p) => p.date !== date);
     set({
       days: remaining.length ? remaining : [todayISO()],
-      places: remainingPlaces,
+      places: places.filter((p) => p.date !== date),
       selectedDate: remaining.length ? remaining[0] : todayISO(),
       selectedId: null,
     });
@@ -115,29 +125,19 @@ export const useItineraryStore = create((set, get) => ({
     set((s) => ({
       places: [
         ...s.places,
-        {
-          id: uuid(),
-          modeToNext: defaultMode,
-          date: s.selectedDate, // por defecto al día activo
-          ...place,
-        },
+        { id: uuid(), modeToNext: defaultMode, date: s.selectedDate, ...place },
       ],
     })),
-
   updatePlace: (id, patch) =>
     set((s) => ({
       places: s.places.map((p) => (p.id === id ? { ...p, ...patch } : p)),
     })),
-
   removePlace: (id) =>
     set((s) => ({
       places: s.places.filter((p) => p.id !== id),
       selectedId: s.selectedId === id ? null : s.selectedId,
     })),
 
-  reorderPlaces: (newOrder) => set({ places: newOrder }),
-
-  /* filtros/consultas */
   placesBySelectedDate: () => {
     const { places, selectedDate } = get();
     return places
@@ -145,18 +145,13 @@ export const useItineraryStore = create((set, get) => ({
       .sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
   },
 
-  totalJPYForDate: (date) => {
-    const { places } = get();
-    return places
-      .filter((p) => p.date === date)
-      .reduce((acc, p) => acc + (Number(p.spendJPY) || 0), 0);
-  },
-  totalJPYAll: () => {
-    const { places } = get();
-    return places.reduce((acc, p) => acc + (Number(p.spendJPY) || 0), 0);
-  },
+  totalJPYForDate: (date) =>
+    get()
+      .places.filter((p) => p.date === date)
+      .reduce((acc, p) => acc + (Number(p.spendJPY) || 0), 0),
+  totalJPYAll: () =>
+    get().places.reduce((acc, p) => acc + (Number(p.spendJPY) || 0), 0),
 
-  /* export/import */
   clearAll: () =>
     set({
       places: [],
@@ -165,49 +160,43 @@ export const useItineraryStore = create((set, get) => ({
       selectedDate: todayISO(),
     }),
   exportJSON: () => {
-    const { places, days, selectedDate, currency } = get();
+    const { places, days, selectedDate, currency, ui } = get();
     return JSON.stringify(
-      { version: 2, country: "Japan", days, selectedDate, currency, places },
+      {
+        version: 3,
+        country: "Japan",
+        days,
+        selectedDate,
+        currency,
+        ui,
+        places,
+      },
       null,
       2
     );
   },
   importJSON: (jsonStr) => {
     const data = JSON.parse(jsonStr);
-    if (!data.places || !Array.isArray(data.places)) {
-      throw new Error("JSON inválido: falta 'places[]'.");
-    }
     const days =
       Array.isArray(data.days) && data.days.length
         ? data.days
-        : [...new Set(data.places.map((p) => p.date || todayISO()))];
-    const normalized = data.places.map((p) => ({
-      id: p.id ?? uuid(),
-      name: p.name ?? "Sin nombre",
-      category: p.category ?? "otro",
-      lat: p.lat,
-      lng: p.lng,
-      startTime: p.startTime ?? "",
-      durationMin: p.durationMin ?? 60,
-      priceRange: p.priceRange ?? "",
-      items: p.items ?? [],
-      menuImageUrl: p.menuImageUrl ?? "",
-      sourceUrl: p.sourceUrl ?? "",
-      notes: p.notes ?? "",
-      modeToNext: p.modeToNext ?? defaultMode,
-      spendJPY: p.spendJPY ?? 0,
-      date: p.date ?? days[0],
-    }));
+        : [...new Set((data.places || []).map((p) => p.date))];
     set({
-      places: normalized,
+      places: (data.places || []).map((p) => ({ id: p.id ?? uuid(), ...p })),
       selectedId: null,
-      days,
-      selectedDate: data.selectedDate ?? days[0],
+      days: days.length ? days : [todayISO()],
+      selectedDate: data.selectedDate ?? (days[0] || todayISO()),
       currency: data.currency ?? { code: "USD", ratePerJPY: 0.0065 },
+      ui: {
+        showMap: true,
+        financeOpen: true,
+        routeVisible: true,
+        basemap: "osm",
+        ...(data.ui || {}),
+      },
     });
   },
 
-  /* currency */
   setCurrencyCode: (code) =>
     set((s) => ({ currency: { ...s.currency, code } })),
   setCurrencyRatePerJPY: (ratePerJPY) =>

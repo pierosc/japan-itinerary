@@ -2,13 +2,11 @@ import ItineraryList from "./ItineraryList";
 import PlaceForm from "./PlaceForm";
 import ImportExport from "./ImportExport";
 import DaySelector from "./day/DaySelector";
-import BudgetSummary from "./finance/BudgetSummary";
-import CurrencyConverter from "./finance/CurrencyConverter";
+import FinancePanel from "./finance/FinancePanel";
 import { useItineraryStore } from "../hooks/useItineraryStore";
 
 export default function Sidebar() {
   const selectedId = useItineraryStore((s) => s.selectedId);
-  const selectedDate = useItineraryStore((s) => s.selectedDate);
 
   return (
     <div className="h-full w-full flex flex-col gap-3">
@@ -20,18 +18,13 @@ export default function Sidebar() {
         <DaySelector />
       </div>
 
-      <div className="card">
-        <BudgetSummary />
-      </div>
-
-      <div className="card">
-        <CurrencyConverter />
-      </div>
+      <FinancePanel />
 
       <div className="card">
         <ItineraryList />
       </div>
 
+      {/* Mantengo el editor en el panel lateral si prefieres editar aquí también */}
       {selectedId && (
         <div className="card">
           <PlaceForm />
