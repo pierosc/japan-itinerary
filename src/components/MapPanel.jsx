@@ -1,3 +1,4 @@
+// src/components/MapPanel.jsx
 import {
   MapContainer,
   TileLayer,
@@ -21,29 +22,48 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-// basemaps gratuitos (raster) con etiquetas diferentes
-const BASEMAPS = {
+// Basemaps: EN (Esri/Carto) y opción ES (MapTiler requiere key)
+const BASEMAPS = (key) => ({
   osm: {
-    name: "OSM (local names)",
+    name: "OSM (local)",
     url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attr: "&copy; OpenStreetMap",
+    attr: "© OpenStreetMap",
   },
   osmjp: {
     name: "OSM Japan (日本語)",
     url: "https://tile.openstreetmap.jp/{z}/{x}/{y}.png",
-    attr: "&copy; OpenStreetMap Japan",
+    attr: "© OSM Japan",
   },
-  osmfr: {
-    name: "OSM France (fr)",
-    url: "https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png",
-    attr: "&copy; OpenStreetMap France",
+  "carto-en": {
+    name: "Carto Positron (EN)",
+    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    attr: "© CARTO, OSM",
   },
-  osmde: {
-    name: "OSM Germany (de)",
-    url: "https://{s}.tile.openstreetmap.de/{z}/{x}/{y}.png",
-    attr: "&copy; OpenStreetMap Germany",
+  "carto-dark-en": {
+    name: "Carto DarkMatter (EN)",
+    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    attr: "© CARTO, OSM",
   },
-};
+  // Esri (inglés)
+  "esri-worldstreet": {
+    name: "Esri WorldStreet (EN)",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    attr: "Tiles © Esri — Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Garmin, FAO, NPS, and the GIS User Community",
+  },
+  "esri-worldgray": {
+    name: "Esri WorldGray (EN)",
+    url: "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    attr: "Tiles © Esri — Esri, DeLorme, NAVTEQ",
+  },
+  // Español real (requiere key)
+  "maptiler-es": {
+    name: "MapTiler (ES)*",
+    url: key
+      ? `https://api.maptiler.com/maps/streets/{z}/{x}/{y}.png?key=${key}&lang=es`
+      : "",
+    attr: "© MapTiler, OSM",
+  },
+});
 
 function ClickToAdd() {
   const addPlace = useItineraryStore((s) => s.addPlace);
@@ -64,49 +84,64 @@ function ClickToAdd() {
 export default function MapPanel() {
   const {
     placesBySelectedDate,
+    routesBySelectedDate,
     selectedId,
     setSelected,
     updatePlace,
     ui,
     setBasemap,
     toggleRoute,
+    setShowMap,
   } = useItineraryStore();
+
   const places = placesBySelectedDate();
+  const routes = routesBySelectedDate();
   const bounds = useMemo(
     () => L.latLngBounds(JAPAN_BOUNDS.map(([a, b]) => [a, b])),
     []
   );
+  const bm =
+    BASEMAPS(ui.mapTilerKey)[ui.basemap] || BASEMAPS(ui.mapTilerKey).osm;
 
-  // Si el usuario eligió ver ficha (showMap=false) y hay seleccionado, renderizar ficha
   if (!ui.showMap && selectedId) return <SelectedPlaceView />;
-
-  const bm = BASEMAPS[ui.basemap] || BASEMAPS.osm;
-  const poly = places.map((p) => [p.lat, p.lng]);
 
   return (
     <div className="h-full w-full" style={{ position: "relative" }}>
-      {/* Overlay de controles arriba a la derecha */}
+      {/* Controles superpuestos */}
       <div
         style={{ position: "absolute", right: 12, top: 12, zIndex: 1000 }}
         className="card"
       >
         <div className="grid" style={{ gridTemplateColumns: "1fr", gap: 8 }}>
           <label className="text-xs">
-            Basemap / Idioma
+            Basemap
             <select
               className="input"
               value={ui.basemap}
               onChange={(e) => setBasemap(e.target.value)}
             >
-              {Object.entries(BASEMAPS).map(([k, v]) => (
-                <option key={k} value={k}>
+              {Object.entries(BASEMAPS(ui.mapTilerKey)).map(([k, v]) => (
+                <option
+                  key={k}
+                  value={k}
+                  disabled={k === "maptiler-es" && !ui.mapTilerKey}
+                >
                   {v.name}
                 </option>
               ))}
             </select>
           </label>
+          {ui.basemap === "maptiler-es" && !ui.mapTilerKey && (
+            <div className="text-xs">
+              Para español, agrega tu MapTiler key en el JSON (ui.mapTilerKey) y
+              reimporta.
+            </div>
+          )}
           <button className="btn-outline" onClick={toggleRoute}>
-            {ui.routeVisible ? "Ocultar ruta" : "Mostrar ruta"}
+            {ui.routeVisible ? "Ocultar rutas" : "Mostrar rutas"}
+          </button>
+          <button className="btn-outline" onClick={() => setShowMap(false)}>
+            Ver ficha seleccionada
           </button>
         </div>
       </div>
@@ -116,8 +151,9 @@ export default function MapPanel() {
         className="h-full w-full rounded-lg"
         scrollWheelZoom
       >
-        <TileLayer attribution={bm.attr} url={bm.url} />
+        {bm.url && <TileLayer attribution={bm.attr} url={bm.url} />}
         <ClickToAdd />
+
         {places.map((p) => (
           <Marker
             key={p.id}
@@ -147,7 +183,28 @@ export default function MapPanel() {
             </Popup>
           </Marker>
         ))}
-        {ui.routeVisible && poly.length >= 2 && <Polyline positions={poly} />}
+
+        {ui.routeVisible &&
+          routes.map((r) => {
+            const from = places.find((p) => p.id === r.fromId);
+            const to = places.find((p) => p.id === r.toId);
+            if (!from || !to) return null;
+            const line =
+              r.geojson && r.geojson.length
+                ? r.geojson
+                : [
+                    [from.lat, from.lng],
+                    [to.lat, to.lng],
+                  ];
+            const dashArray = r.mode === "train" ? "6 8" : undefined;
+            return (
+              <Polyline
+                key={r.id}
+                positions={line}
+                pathOptions={{ dashArray }}
+              />
+            );
+          })}
       </MapContainer>
     </div>
   );

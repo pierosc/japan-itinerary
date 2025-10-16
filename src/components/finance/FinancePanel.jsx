@@ -1,3 +1,4 @@
+// src/components/finance/FinancePanel.jsx
 import { useItineraryStore } from "../../hooks/useItineraryStore";
 import BudgetSummary from "./BudgetSummary";
 import CurrencyConverter from "./CurrencyConverter";
