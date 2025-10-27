@@ -96,6 +96,7 @@ export default function MapPanel() {
 
   const places = placesBySelectedDate();
   const routes = routesBySelectedDate();
+
   const bounds = useMemo(
     () => L.latLngBounds(JAPAN_BOUNDS.map(([a, b]) => [a, b])),
     []
@@ -103,6 +104,7 @@ export default function MapPanel() {
   const bm =
     BASEMAPS(ui.mapTilerKey)[ui.basemap] || BASEMAPS(ui.mapTilerKey).osm;
 
+  // Si ocultaste el mapa (p.ej. desde la lista) y hay seleccionado, muestra ficha
   if (!ui.showMap && selectedId) return <SelectedPlaceView />;
 
   return (
@@ -131,12 +133,14 @@ export default function MapPanel() {
               ))}
             </select>
           </label>
+
           {ui.basemap === "maptiler-es" && !ui.mapTilerKey && (
             <div className="text-xs">
               Para español, agrega tu MapTiler key en el JSON (ui.mapTilerKey) y
               reimporta.
             </div>
           )}
+
           <button className="btn-outline" onClick={toggleRoute}>
             {ui.routeVisible ? "Ocultar rutas" : "Mostrar rutas"}
           </button>
@@ -152,8 +156,10 @@ export default function MapPanel() {
         scrollWheelZoom
       >
         {bm.url && <TileLayer attribution={bm.attr} url={bm.url} />}
+
         <ClickToAdd />
 
+        {/* Marcadores */}
         {places.map((p) => (
           <Marker
             key={p.id}
@@ -184,11 +190,39 @@ export default function MapPanel() {
           </Marker>
         ))}
 
+        {/* Conectores virtuales (entre consecutivos) si no existe ruta real */}
+        {ui.routeVisible &&
+          places.map((p, i) => {
+            const next = places[i + 1];
+            if (!next) return null;
+            const hasRoute = routes.some(
+              (r) => r.fromId === p.id && r.toId === next.id
+            );
+            if (hasRoute) return null;
+            return (
+              <Polyline
+                key={`virtual-${p.id}-${next.id}`}
+                positions={[
+                  [p.lat, p.lng],
+                  [next.lat, next.lng],
+                ]}
+                pathOptions={{
+                  color: "#6b7280",
+                  opacity: 0.7,
+                  weight: 3,
+                  dashArray: "4 6",
+                }}
+              />
+            );
+          })}
+
+        {/* Rutas reales */}
         {ui.routeVisible &&
           routes.map((r) => {
             const from = places.find((p) => p.id === r.fromId);
             const to = places.find((p) => p.id === r.toId);
             if (!from || !to) return null;
+
             const line =
               r.geojson && r.geojson.length
                 ? r.geojson
@@ -196,12 +230,14 @@ export default function MapPanel() {
                     [from.lat, from.lng],
                     [to.lat, to.lng],
                   ];
+
             const dashArray = r.mode === "train" ? "6 8" : undefined;
+
             return (
               <Polyline
                 key={r.id}
                 positions={line}
-                pathOptions={{ dashArray }}
+                pathOptions={{ dashArray, weight: 4, opacity: 0.95 }}
               />
             );
           })}

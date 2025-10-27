@@ -1,5 +1,5 @@
-import { useItineraryStore } from "../../hooks/useItineraryStore";
 import { useState } from "react";
+import { useItineraryStore } from "../../hooks/useItineraryStore";
 
 export default function DaySelector() {
   const {
@@ -15,34 +15,45 @@ export default function DaySelector() {
   return (
     <>
       <h2 className="font-semibold mb-2">Días del viaje</h2>
-      <div className="flex" style={{ gap: 8, flexWrap: "wrap" }}>
-        {days.map((d) => {
-          const total = totalJPYForDate(d);
-          const active = d === selectedDate;
-          return (
-            <button
-              key={d}
-              className={`btn-outline`}
-              style={{
-                borderColor: active ? "var(--brand)" : "var(--border)",
-                color: active ? "var(--brand)" : "var(--text)",
-              }}
-              onClick={() => setSelectedDate(d)}
-              title={`Gasto día: ¥${total}`}
-            >
-              {d} {total ? `· ¥${total}` : ""}
-            </button>
-          );
-        })}
-      </div>
 
-      <div className="mt-2" style={{ display: "flex", gap: 8 }}>
+      {/* 1 sola línea, sin wrap; scroll horizontal si no alcanza */}
+      <div
+        className="flex"
+        style={{
+          gap: 8,
+          alignItems: "center",
+          flexWrap: "nowrap",
+          overflowX: "auto",
+          paddingBottom: 2,
+        }}
+      >
+        {/* SELECT de días */}
+        <select
+          className="input"
+          value={selectedDate}
+          onChange={(e) => setSelectedDate(e.target.value)}
+          title="Selecciona el día del itinerario"
+          style={{ flex: "1 1 auto", minWidth: 260 }}
+        >
+          {days.map((d) => {
+            const total = totalJPYForDate(d);
+            return (
+              <option key={d} value={d}>
+                {`${d}${total ? ` · ¥${total}` : ""}`}
+              </option>
+            );
+          })}
+        </select>
+
+        {/* Añadir día (input + botón) */}
         <input
           type="date"
           className="input"
           value={newDate}
           onChange={(e) => setNewDate(e.target.value)}
+          style={{ width: 200 }}
         />
+
         <button
           className="btn"
           onClick={() => {
@@ -50,19 +61,24 @@ export default function DaySelector() {
             addDay(newDate);
             setNewDate("");
           }}
+          title="Añadir día"
+          style={{ whiteSpace: "nowrap" }}
         >
           Añadir día
         </button>
+
         {days.length > 1 && (
           <button
             className="btn-outline"
             onClick={() => {
-              if (confirm("¿Eliminar el día actual y sus puntos?")) {
+              if (confirm("¿Eliminar el día seleccionado y sus puntos?")) {
                 removeDay(selectedDate);
               }
             }}
+            title="Eliminar día seleccionado"
+            style={{ whiteSpace: "nowrap" }}
           >
-            Eliminar día actual
+            Eliminar día
           </button>
         )}
       </div>

@@ -197,6 +197,10 @@ textarea.input:focus {
   display: flex;
   flex-direction: column;
   gap: 10px;
+
+  list-style: none; /* nuevo */
+  padding-left: 0; /* nuevo */
+  margin: 0; /* nuevo */
 }
 .item {
   border: 1px solid var(--border);
