@@ -83,6 +83,8 @@ export const useItineraryStore = create((set, get) => ({
     routeVisible: true,
     basemap: "esri-worldgray", // tiene etiquetas EN
     mapTilerKey: "", // para español real si lo deseas
+    sidebarTab: "itinerary", // itinerary | myplaces | finance | settings
+    theme: "dark", // dark | light
   },
 
   // ===== UI =====
@@ -93,6 +95,15 @@ export const useItineraryStore = create((set, get) => ({
     set((s) => ({ ui: { ...s.ui, routeVisible: !s.ui.routeVisible } })),
   setBasemap: (basemap) => set((s) => ({ ui: { ...s.ui, basemap } })),
   setMapTilerKey: (k) => set((s) => ({ ui: { ...s.ui, mapTilerKey: k } })),
+  setSidebarTab: (tab) => set((s) => ({ ui: { ...s.ui, sidebarTab: tab } })),
+  setTheme: (theme) => set((s) => ({ ui: { ...s.ui, theme } })),
+  toggleTheme: () =>
+    set((s) => ({
+      ui: {
+        ...s.ui,
+        theme: s.ui.theme === "light" ? "dark" : "light",
+      },
+    })),
 
   // ===== Días =====
   setSelectedDate: (date) => {
@@ -119,6 +130,8 @@ export const useItineraryStore = create((set, get) => ({
 
   // ===== Lugares =====
   setSelected: (id) => set({ selectedId: id }),
+
+  // respeta place.date si viene, para poder crear lugares sin día
   addPlace: (place) =>
     set((s) => ({
       places: [
@@ -126,12 +139,13 @@ export const useItineraryStore = create((set, get) => ({
         {
           id: uuid(),
           type: "place",
-          date: s.selectedDate,
+          date: place.date !== undefined ? place.date : s.selectedDate,
           images: [],
           ...place,
         },
       ],
     })),
+
   updatePlace: (id, patch) =>
     set((s) => ({
       places: s.places.map((p) => (p.id === id ? { ...p, ...patch } : p)),
@@ -142,6 +156,43 @@ export const useItineraryStore = create((set, get) => ({
       routes: s.routes.filter((r) => r.fromId !== id && r.toId !== id),
       selectedId: s.selectedId === id ? null : s.selectedId,
     })),
+
+  // ===== Pool de lugares sin día (My places) =====
+  unassignedPlaces: () => {
+    const { places } = get();
+    // todo lo que no tenga date (null/undefined) se considera "My places"
+    return places.filter((p) => !p.date);
+  },
+
+  addUnassignedPlace: (place) =>
+    set((s) => ({
+      places: [
+        ...s.places,
+        {
+          id: uuid(),
+          type: "place",
+          date: null, // explícitamente sin día
+          images: [],
+          ...place,
+        },
+      ],
+    })),
+
+  assignPlaceToDay: (id, date) =>
+    set((s) => {
+      const days = s.days.includes(date) ? s.days : [...s.days, date];
+
+      const place = s.places.find((p) => p.id === id);
+      if (!place) return {};
+
+      const updated = { ...place, date };
+      const others = s.places.filter((p) => p.id !== id);
+
+      return {
+        days,
+        places: [...others, updated],
+      };
+    }),
 
   // Reordenar SOLO el día seleccionado; se preservan rutas que coincidan con pares consecutivos
   reorderPlacesForDate: (date, orderedIds) =>
@@ -233,7 +284,11 @@ export const useItineraryStore = create((set, get) => ({
     const days =
       Array.isArray(data.days) && data.days.length
         ? data.days
-        : [...new Set((data.places || []).map((p) => p.date))];
+        : [
+            ...new Set(
+              (data.places || []).map((p) => p.date).filter(Boolean) // evita incluir null/undefined como día
+            ),
+          ];
     set({
       places: (data.places || []).map((p) => ({
         id: p.id ?? uuid(),
