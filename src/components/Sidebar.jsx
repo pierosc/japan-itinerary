@@ -1,6 +1,7 @@
 // src/components/Sidebar.jsx
 import ItineraryList from "./ItineraryList";
 import PlaceForm from "./PlaceForm";
+import ImportExport from "./ImportExport";
 import DaySelector from "./day/DaySelector";
 import FinancePanel from "./finance/FinancePanel";
 import MyPlacesPanel from "./MyPlacesPanel";
@@ -11,12 +12,20 @@ export default function Sidebar() {
   const selectedId = useItineraryStore((s) => s.selectedId);
   const ui = useItineraryStore((s) => s.ui);
   const setSidebarTab = useItineraryStore((s) => s.setSidebarTab);
+  const storageMode = ui.storageMode;
 
   const tabClass = (tab) =>
     "btn-outline flex-1 text-xs " + (ui.sidebarTab === tab ? "btn-active" : "");
 
   return (
     <div className="h-full w-full flex flex-col gap-3">
+      {/* Import/Export SOLO en modo local */}
+      {storageMode === "local" && (
+        <div className="toolbar card">
+          <ImportExport />
+        </div>
+      )}
+
       {/* Menú de pestañas */}
       <div className="card">
         <div className="flex gap-2 flex-wrap">
@@ -61,12 +70,10 @@ export default function Sidebar() {
       )}
 
       {ui.sidebarTab === "myplaces" && <MyPlacesPanel />}
-
       {ui.sidebarTab === "finance" && <FinancePanel />}
-
       {ui.sidebarTab === "settings" && <SettingsPanel />}
 
-      {/* Editor siempre disponible abajo si hay seleccionado */}
+      {/* Editor si hay un lugar seleccionado */}
       {selectedId && (
         <div className="card">
           <PlaceForm />

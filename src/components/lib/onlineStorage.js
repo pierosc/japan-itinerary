@@ -1,22 +1,29 @@
 // src/lib/onlineStorage.js
 import { supabase } from "./supabaseClient";
 
-export async function saveTripOnline({ tripId, userId, data }) {
+/**
+ * Guarda el itinerario completo de un trip en Supabase (tabla trip_data).
+ * - Si ya existe ese trip_id -> hace upsert (update).
+ */
+export async function saveTripOnline({ tripId, title, userId, data }) {
   if (!supabase) {
-    const error = new Error(
-      "Supabase no está configurado. Revisa VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY."
-    );
+    const error = new Error("Supabase no está configurado.");
     console.error("[Supabase] saveTripOnline:", error);
     return { ok: false, error };
   }
 
   try {
-    const payload = { trip_id: tripId, user_id: userId ?? null, data };
+    const payload = {
+      trip_id: tripId,
+      title: title ?? null,
+      user_id: userId ?? null,
+      data,
+    };
 
-    const { data: upserted, error } = await supabase
+    const { data: row, error } = await supabase
       .from("trip_data")
       .upsert(payload, { onConflict: "trip_id" })
-      .select("trip_id, updated_at")
+      .select("trip_id, title, updated_at")
       .single();
 
     if (error) {
@@ -24,19 +31,19 @@ export async function saveTripOnline({ tripId, userId, data }) {
       return { ok: false, error };
     }
 
-    console.log("[Supabase] Guardado OK:", upserted);
-    return { ok: true, data: upserted };
+    return { ok: true, data: row };
   } catch (err) {
     console.error("[Supabase] saveTripOnline exception:", err);
     return { ok: false, error: err };
   }
 }
 
+/**
+ * Carga el JSON de un trip concreto.
+ */
 export async function loadTripOnline({ tripId, userId }) {
   if (!supabase) {
-    const error = new Error(
-      "Supabase no está configurado. Revisa VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY."
-    );
+    const error = new Error("Supabase no está configurado.");
     console.error("[Supabase] loadTripOnline:", error);
     return { ok: false, error };
   }
@@ -44,7 +51,7 @@ export async function loadTripOnline({ tripId, userId }) {
   try {
     let query = supabase
       .from("trip_data")
-      .select("data, updated_at")
+      .select("data, title, updated_at, user_id")
       .eq("trip_id", tripId);
 
     if (userId) query = query.eq("user_id", userId);
@@ -57,17 +64,55 @@ export async function loadTripOnline({ tripId, userId }) {
     }
 
     if (!data) {
-      const notFound = new Error(
-        "No se encontró ningún registro para este viaje."
-      );
-      console.warn("[Supabase] loadTripOnline:", notFound.message);
+      const notFound = new Error("No se encontró este viaje en Supabase.");
       return { ok: false, error: notFound };
     }
 
-    console.log("[Supabase] Carga OK:", data);
-    return { ok: true, data: data.data, meta: { updated_at: data.updated_at } };
+    return {
+      ok: true,
+      data: data.data,
+      meta: { title: data.title, updated_at: data.updated_at },
+    };
   } catch (err) {
     console.error("[Supabase] loadTripOnline exception:", err);
+    return { ok: false, error: err };
+  }
+}
+
+/**
+ * Lista todos los trips del usuario (solo con metadata).
+ * Esto se usa para la pantalla de “Mis viajes”.
+ */
+export async function fetchTripsForUser(userId) {
+  if (!supabase) {
+    const error = new Error("Supabase no está configurado.");
+    console.error("[Supabase] fetchTripsForUser:", error);
+    return { ok: false, error };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("trip_data")
+      .select("trip_id, title, updated_at")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false });
+
+    if (error) {
+      console.error("[Supabase] fetchTripsForUser error:", error);
+      return { ok: false, error };
+    }
+
+    const trips = (data || []).map((row) => ({
+      id: row.trip_id,
+      title: row.title || "Sin título",
+      subtitle: row.updated_at ? new Date(row.updated_at).toLocaleString() : "",
+      destination: "Japan",
+      coverUrl: null,
+    }));
+
+    return { ok: true, trips };
+  } catch (err) {
+    console.error("[Supabase] fetchTripsForUser exception:", err);
     return { ok: false, error: err };
   }
 }

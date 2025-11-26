@@ -14,9 +14,10 @@ function todayISO() {
 const D0 = todayISO();
 
 export const useItineraryStore = create((set, get) => ({
-  // ===== Datos base (SIN ejemplos) =====
-  places: [], // el orden del array define el orden visual
-  routes: [], // {id,type:'route',date,fromId,toId,mode,geojson?,name?,durationMin?,priceJPY?}
+  // ===== Datos base =====
+  // Sin ejemplos: arrancamos vacío
+  places: [],
+  routes: [],
 
   days: [D0],
   selectedDate: D0,
@@ -33,8 +34,8 @@ export const useItineraryStore = create((set, get) => ({
     basemap: "esri-worldgray",
     mapTilerKey: "",
     sidebarTab: "itinerary", // itinerary | myplaces | finance | settings
-    theme: "dark", // dark | light
-    storageMode: "local", // "local" | "online"
+    theme: "light", // -> claro por defecto
+    storageMode: "online", // -> online (Supabase) por defecto
   },
 
   // ====== Acciones UI ======
@@ -49,7 +50,10 @@ export const useItineraryStore = create((set, get) => ({
   setTheme: (theme) => set((s) => ({ ui: { ...s.ui, theme } })),
   toggleTheme: () =>
     set((s) => ({
-      ui: { ...s.ui, theme: s.ui.theme === "light" ? "dark" : "light" },
+      ui: {
+        ...s.ui,
+        theme: s.ui.theme === "light" ? "dark" : "light",
+      },
     })),
   setStorageMode: (mode) =>
     set((s) => ({ ui: { ...s.ui, storageMode: mode } })),
@@ -82,7 +86,6 @@ export const useItineraryStore = create((set, get) => ({
   // ====== Lugares ======
   setSelected: (id) => set({ selectedId: id }),
 
-  // addPlace respeta place.date si viene (para poder crear sin día)
   addPlace: (place) =>
     set((s) => ({
       places: [
@@ -163,6 +166,7 @@ export const useItineraryStore = create((set, get) => ({
           )
           .filter(Boolean)
       );
+
       const keepRoutes = s.routes.filter(
         (r) => r.date !== date || newPairs.has(`${r.fromId}|${r.toId}`)
       );

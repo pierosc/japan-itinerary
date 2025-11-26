@@ -1,29 +1,19 @@
 // src/App.jsx
 import { useEffect, useState } from "react";
 import { useUser, SignInButton, UserButton } from "@clerk/clerk-react";
-import { createClient } from "@supabase/supabase-js";
 
 import MapPanel from "./components/MapPanel";
 import Sidebar from "./components/Sidebar";
 import LandingPage from "./components/LandingPage";
-import ImportExport from "./components/ImportExport";
+
 import { useItineraryStore } from "./hooks/useItineraryStore";
+import {
+  saveTripOnline,
+  loadTripOnline,
+  fetchTripsForUser,
+} from "./components/lib/onlineStorage";
 
 import "./styles.css";
-
-/* ========= Cliente Supabase ========= */
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  console.warn(
-    "[Supabase] Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en .env"
-  );
-}
-
-const supabase =
-  supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 /* ========= Helpers LOCAL (localStorage) ========= */
 
@@ -51,109 +41,13 @@ function loadTripLocal(tripId) {
   }
 }
 
-/* ========= Helpers ONLINE (Supabase) ========= */
-
-async function saveTripOnline({ tripId, title, userId, data }) {
-  if (!supabase) {
-    const error = new Error(
-      "Supabase no está configurado. Revisa VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY."
-    );
-    console.error("[Supabase] saveTripOnline:", error);
-    return { ok: false, error };
-  }
-
-  try {
-    const payload = {
-      trip_id: tripId,
-      user_id: userId ?? null,
-      title: title ?? null,
-      data,
-    };
-
-    const { data: upserted, error } = await supabase
-      .from("trip_data")
-      .upsert(payload, { onConflict: "trip_id" })
-      .select("trip_id, title, updated_at")
-      .single();
-
-    if (error) {
-      console.error("[Supabase] saveTripOnline error:", error);
-      return { ok: false, error };
-    }
-
-    console.log("[Supabase] Guardado OK:", upserted);
-    return { ok: true, data: upserted };
-  } catch (err) {
-    console.error("[Supabase] saveTripOnline exception:", err);
-    return { ok: false, error: err };
-  }
-}
-
-async function loadTripOnline({ tripId, userId }) {
-  if (!supabase) {
-    const error = new Error(
-      "Supabase no está configurado. Revisa VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY."
-    );
-    console.error("[Supabase] loadTripOnline:", error);
-    return { ok: false, error };
-  }
-
-  try {
-    let query = supabase
-      .from("trip_data")
-      .select("data, updated_at")
-      .eq("trip_id", tripId);
-
-    if (userId) query = query.eq("user_id", userId);
-
-    const { data, error } = await query.maybeSingle();
-
-    if (error) {
-      console.error("[Supabase] loadTripOnline error:", error);
-      return { ok: false, error };
-    }
-
-    if (!data) {
-      const notFound = new Error(
-        "No se encontró ningún registro para este viaje."
-      );
-      console.warn("[Supabase] loadTripOnline:", notFound.message);
-      return { ok: false, error: notFound };
-    }
-
-    console.log("[Supabase] Carga OK:", data);
-    return { ok: true, data: data.data, meta: { updated_at: data.updated_at } };
-  } catch (err) {
-    console.error("[Supabase] loadTripOnline exception:", err);
-    return { ok: false, error: err };
-  }
-}
-
-/** Lista todos los viajes de un usuario (solo metadatos) */
-async function listTripsOnline(userId) {
-  if (!supabase || !userId) return { ok: false, data: [], error: null };
-
-  const { data, error } = await supabase
-    .from("trip_data")
-    .select("trip_id, title, updated_at")
-    .eq("user_id", userId)
-    .order("updated_at", { ascending: false });
-
-  if (error) {
-    console.error("[Supabase] listTripsOnline error:", error);
-    return { ok: false, data: [], error };
-  }
-
-  return { ok: true, data, error: null };
-}
-
 /* ========= Componentes de UI ========= */
 
 function EntryScreen({ onGuest }) {
   return (
     <div className="entry-root">
       <div className="entry-card">
-        <h1 className="landing-title mb-2">Dibu Trip Planner</h1>
+        <h1 className="landing-title mb-2">Planner de viajes</h1>
         <p className="landing-subtitle mb-3">
           Organiza tus días, lugares y gastos en un solo lugar.
         </p>
@@ -181,46 +75,33 @@ function PlannerShell({ trip, onBack, onSave, onLoad }) {
 
   return (
     <div className="h-full flex flex-col gap-3">
-      {/* APP BAR */}
       <header className="card planner-header">
-        <div className="flex justify-between items-center gap-3">
-          <div className="flex flex-col gap-1">
-            <button className="btn-outline text-xs" onClick={onBack}>
+        <div className="flex justify-between items-center">
+          <div>
+            <button className="btn-outline text-xs mb-1" onClick={onBack}>
               ← Volver a mis viajes
             </button>
-            <div>
-              <h2 className="font-semibold">{trip.title}</h2>
-              {trip.subtitle && (
-                <div className="text-xs text-gray-600">{trip.subtitle}</div>
-              )}
-              {trip.destination && (
-                <div className="mt-1">
-                  <span className="chip">{trip.destination}</span>
-                </div>
-              )}
-            </div>
+            <h2 className="font-semibold">{trip.title}</h2>
+            {trip.subtitle && (
+              <div className="text-xs text-gray-600">{trip.subtitle}</div>
+            )}
           </div>
-
-          <div className="flex items-center gap-3">
-            {/* Import/Export JSON subido al AppBar */}
-            <div className="toolbar">
-              <ImportExport />
-            </div>
-
-            {/* Separador visual */}
-            <div className="flex items-center gap-2">
-              <button className="btn-outline text-xs" onClick={onLoad}>
-                Cargar
-              </button>
-              <button className="btn text-xs" onClick={onSave}>
-                Guardar
-              </button>
-            </div>
-
+          <div className="flex items-center gap-2">
+            {trip.destination && (
+              <span className="chip">{trip.destination}</span>
+            )}
+            <button className="btn-outline text-xs" onClick={onLoad}>
+              Cargar
+            </button>
+            <button className="btn text-xs" onClick={onSave}>
+              Guardar
+            </button>
             {isSignedIn && (
               <UserButton
                 appearance={{
-                  elements: { avatarBox: { width: 32, height: 32 } },
+                  elements: {
+                    avatarBox: { width: 32, height: 32 },
+                  },
                 }}
               />
             )}
@@ -228,7 +109,6 @@ function PlannerShell({ trip, onBack, onSave, onLoad }) {
         </div>
       </header>
 
-      {/* Layout principal: mapa + sidebar */}
       <div className="h-full grid grid-cols-2 gap-3">
         <div className="panel">
           <div className="h-full">
@@ -269,43 +149,33 @@ export default function App() {
     }
   }, [theme]);
 
-  // Cargar lista de viajes ONLINE cuando el usuario está logueado
+  // Cargar lista de trips desde Supabase cuando hay sesión
   useEffect(() => {
-    const fetchTrips = async () => {
-      if (!isSignedIn || !user?.id) return;
-      if (storageMode !== "online") return;
+    if (!isSignedIn || !user?.id) return;
 
-      const result = await listTripsOnline(user.id);
-      if (!result.ok) {
-        console.warn("[App] No se pudo cargar lista de viajes:", result.error);
-        return;
+    (async () => {
+      const res = await fetchTripsForUser(user.id);
+      if (res.ok) {
+        setTrips(res.trips);
+      } else {
+        console.error("No se pudieron cargar los viajes:", res.error);
       }
-
-      const mapped = result.data.map((row) => ({
-        id: row.trip_id,
-        title: row.title || "Viaje sin título",
-        subtitle: "",
-        destination: "",
-      }));
-
-      setTrips(mapped);
-    };
-
-    fetchTrips();
-  }, [isSignedIn, user?.id, storageMode]);
+    })();
+  }, [isSignedIn, user?.id]);
 
   const canEnter = isSignedIn || guest;
   const activeTrip = trips.find((t) => t.id === activeTripId) || null;
 
   const handleAddTrip = (data) => {
     const id = `trip-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
-    const newTrip = { id, ...data };
-
-    setTrips((prev) => [...prev, newTrip]);
-
-    // Nuevo viaje => planner vacío
-    useItineraryStore.getState().clearAll();
-
+    const newTrip = {
+      id,
+      title: data.title || "New Trip",
+      subtitle: data.subtitle || "",
+      destination: data.destination || "Japan",
+      coverUrl: data.coverUrl || null,
+    };
+    setTrips((prev) => [newTrip, ...prev]);
     setActiveTripId(id);
   };
 
@@ -317,7 +187,7 @@ export default function App() {
     setActiveTripId(null);
   };
 
-  // Guardar según modo (local / online)
+  // === Guardar según modo (local / online) ===
   const handleSave = async () => {
     if (!activeTrip) {
       alert("No hay viaje activo para guardar.");
@@ -352,7 +222,7 @@ export default function App() {
     }
   };
 
-  // Cargar según modo (local / online)
+  // === Cargar según modo (local / online) ===
   const handleLoad = async () => {
     if (!activeTrip) {
       alert("No hay viaje activo para cargar.");
