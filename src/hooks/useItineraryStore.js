@@ -13,6 +13,7 @@ function todayISO() {
 }
 const D0 = todayISO();
 
+// Lugares de ejemplo para arrancar
 const examplePlaces = [
   {
     id: uuid(),
@@ -65,29 +66,30 @@ const examplePlaces = [
 ];
 
 export const useItineraryStore = create((set, get) => ({
-  // datos
-  places: examplePlaces, // el ORDEN DEL ARRAY define el orden visual
+  // ===== Datos base =====
+  places: examplePlaces, // el orden del array define el orden visual
   routes: [], // {id,type:'route',date,fromId,toId,mode,geojson?,name?,durationMin?,priceJPY?}
 
   days: [D0],
   selectedDate: D0,
   selectedId: null,
 
-  // conversión
+  // Conversión de moneda
   currency: { code: "USD", ratePerJPY: 0.0065 },
 
-  // UI global
+  // ===== UI global =====
   ui: {
     showMap: true,
-    financeOpen: false, // colapsado por defecto
+    financeOpen: false,
     routeVisible: true,
-    basemap: "esri-worldgray", // tiene etiquetas EN
-    mapTilerKey: "", // para español real si lo deseas
+    basemap: "esri-worldgray",
+    mapTilerKey: "",
     sidebarTab: "itinerary", // itinerary | myplaces | finance | settings
     theme: "dark", // dark | light
+    storageMode: "local", // "local" | "online"
   },
 
-  // ===== UI =====
+  // ====== Acciones UI ======
   setShowMap: (v) => set((s) => ({ ui: { ...s.ui, showMap: v } })),
   toggleFinance: () =>
     set((s) => ({ ui: { ...s.ui, financeOpen: !s.ui.financeOpen } })),
@@ -104,18 +106,22 @@ export const useItineraryStore = create((set, get) => ({
         theme: s.ui.theme === "light" ? "dark" : "light",
       },
     })),
+  setStorageMode: (mode) =>
+    set((s) => ({ ui: { ...s.ui, storageMode: mode } })),
 
-  // ===== Días =====
+  // ====== Días ======
   setSelectedDate: (date) => {
     const state = get();
     if (!state.days.includes(date)) set({ days: [...state.days, date] });
     set({ selectedDate: date, selectedId: null });
   },
+
   addDay: (date) => {
     const { days } = get();
     if (!days.includes(date)) set({ days: [...days, date] });
     set({ selectedDate: date });
   },
+
   removeDay: (date) => {
     const { days, places, routes } = get();
     const remaining = days.filter((d) => d !== date);
@@ -128,10 +134,10 @@ export const useItineraryStore = create((set, get) => ({
     });
   },
 
-  // ===== Lugares =====
+  // ====== Lugares ======
   setSelected: (id) => set({ selectedId: id }),
 
-  // respeta place.date si viene, para poder crear lugares sin día
+  // addPlace respeta place.date si viene (para poder crear sin día)
   addPlace: (place) =>
     set((s) => ({
       places: [
@@ -139,7 +145,10 @@ export const useItineraryStore = create((set, get) => ({
         {
           id: uuid(),
           type: "place",
-          date: place.date !== undefined ? place.date : s.selectedDate,
+          date:
+            place.date !== undefined && place.date !== null
+              ? place.date
+              : s.selectedDate,
           images: [],
           ...place,
         },
@@ -150,6 +159,7 @@ export const useItineraryStore = create((set, get) => ({
     set((s) => ({
       places: s.places.map((p) => (p.id === id ? { ...p, ...patch } : p)),
     })),
+
   removePlace: (id) =>
     set((s) => ({
       places: s.places.filter((p) => p.id !== id),
@@ -157,10 +167,9 @@ export const useItineraryStore = create((set, get) => ({
       selectedId: s.selectedId === id ? null : s.selectedId,
     })),
 
-  // ===== Pool de lugares sin día (My places) =====
+  // ====== My Places (lugares sin día asignado) ======
   unassignedPlaces: () => {
     const { places } = get();
-    // todo lo que no tenga date (null/undefined) se considera "My places"
     return places.filter((p) => !p.date);
   },
 
@@ -171,7 +180,7 @@ export const useItineraryStore = create((set, get) => ({
         {
           id: uuid(),
           type: "place",
-          date: null, // explícitamente sin día
+          date: null,
           images: [],
           ...place,
         },
@@ -181,7 +190,6 @@ export const useItineraryStore = create((set, get) => ({
   assignPlaceToDay: (id, date) =>
     set((s) => {
       const days = s.days.includes(date) ? s.days : [...s.days, date];
-
       const place = s.places.find((p) => p.id === id);
       if (!place) return {};
 
@@ -194,7 +202,7 @@ export const useItineraryStore = create((set, get) => ({
       };
     }),
 
-  // Reordenar SOLO el día seleccionado; se preservan rutas que coincidan con pares consecutivos
+  // ====== Reordenar lugares en un día ======
   reorderPlacesForDate: (date, orderedIds) =>
     set((s) => {
       const others = s.places.filter((p) => p.date !== date);
@@ -219,7 +227,7 @@ export const useItineraryStore = create((set, get) => ({
       return { places: [...others, ...ordered], routes: keepRoutes };
     }),
 
-  // ===== Rutas =====
+  // ====== Rutas ======
   addRouteBetween: (date, fromId, toId, mode = "walk", geojson = null) =>
     set((s) => ({
       routes: [
@@ -227,33 +235,36 @@ export const useItineraryStore = create((set, get) => ({
         { id: uuid(), type: "route", date, fromId, toId, mode, geojson },
       ],
     })),
+
   updateRoute: (id, patch) =>
     set((s) => ({
       routes: s.routes.map((r) => (r.id === id ? { ...r, ...patch } : r)),
     })),
+
   removeRoute: (id) =>
     set((s) => ({ routes: s.routes.filter((r) => r.id !== id) })),
 
-  // ===== Selectores =====
+  // ====== Selectores ======
   placesBySelectedDate: () => {
     const { places, selectedDate } = get();
-    // Mantener ORDEN del array; solo filtramos por fecha
     return places.filter((p) => p.date === selectedDate);
   },
+
   routesBySelectedDate: () => {
     const { routes, selectedDate } = get();
     return routes.filter((r) => r.date === selectedDate);
   },
 
-  // ===== Totales =====
+  // ====== Totales ======
   totalJPYForDate: (date) =>
     get()
       .places.filter((p) => p.date === date)
       .reduce((acc, p) => acc + (Number(p.spendJPY) || 0), 0),
+
   totalJPYAll: () =>
     get().places.reduce((acc, p) => acc + (Number(p.spendJPY) || 0), 0),
 
-  // ===== Export/Import =====
+  // ====== Export / Import ======
   clearAll: () =>
     set({
       places: [],
@@ -262,6 +273,7 @@ export const useItineraryStore = create((set, get) => ({
       days: [todayISO()],
       selectedDate: todayISO(),
     }),
+
   exportJSON: () => {
     const { places, routes, days, selectedDate, currency, ui } = get();
     return JSON.stringify(
@@ -279,16 +291,17 @@ export const useItineraryStore = create((set, get) => ({
       2
     );
   },
+
   importJSON: (jsonStr) => {
     const data = JSON.parse(jsonStr);
     const days =
       Array.isArray(data.days) && data.days.length
         ? data.days
-        : [
-            ...new Set(
-              (data.places || []).map((p) => p.date).filter(Boolean) // evita incluir null/undefined como día
-            ),
-          ];
+        : [...new Set((data.places || []).map((p) => p.date).filter(Boolean))];
+
+    // mantenemos la UI actual (tema, storageMode, pestañas, etc.)
+    const prevUi = get().ui;
+
     set({
       places: (data.places || []).map((p) => ({
         id: p.id ?? uuid(),
@@ -305,20 +318,14 @@ export const useItineraryStore = create((set, get) => ({
       days: days.length ? days : [todayISO()],
       selectedDate: data.selectedDate ?? days[0] ?? todayISO(),
       currency: data.currency ?? { code: "USD", ratePerJPY: 0.0065 },
-      ui: {
-        showMap: true,
-        financeOpen: false,
-        routeVisible: true,
-        basemap: "esri-worldgray",
-        mapTilerKey: "",
-        ...(data.ui || {}),
-      },
+      ui: prevUi,
     });
   },
 
-  // currency
+  // ====== Moneda ======
   setCurrencyCode: (code) =>
     set((s) => ({ currency: { ...s.currency, code } })),
+
   setCurrencyRatePerJPY: (ratePerJPY) =>
     set((s) => ({
       currency: { ...s.currency, ratePerJPY: Number(ratePerJPY) || 0 },

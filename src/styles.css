@@ -1,4 +1,4 @@
-/* ====== Layout base Vite: modificado para full-screen ====== */
+/* ====== Vite base (suavemente adaptado) ====== */
 #root {
   height: 100%;
   margin: 0;
@@ -6,7 +6,7 @@
   text-align: left;
 }
 
-/* ====== Variables y base (tema oscuro por defecto) ====== */
+/* ====== Variables y base (oscuro por defecto) ====== */
 :root {
   --bg: #0b0f14; /* fondo app (oscuro elegante) */
   --panel: #131a21; /* paneles */
@@ -81,7 +81,7 @@ a:hover {
 }
 .grid-cols-2 {
   grid-template-columns: 1.35fr 1fr;
-} /* mapa más ancho */
+} /* mapa más ancho por defecto */
 .gap-3 {
   gap: 12px;
 }
@@ -100,31 +100,13 @@ a:hover {
 .overflow-auto {
   overflow: auto;
 }
-
-/* ====== App layout responsive ====== */
-.app-root {
-  height: 100vh;
+.w-full {
   width: 100%;
-  padding: 12px;
-}
-.app-layout {
-  height: 100%;
-  width: 100%;
-  display: grid;
-  grid-template-columns: 1.35fr 1fr;
-  gap: 12px;
-}
-.app-map,
-.app-sidebar {
-  min-height: 0; /* para que flex y grid no se rompan con overflow */
 }
 
-/* Responsive: una sola columna en pantallas pequeñas */
+/* Responsive: mapa y sidebar se apilan en pantallas pequeñas */
 @media (max-width: 900px) {
-  .app-root {
-    padding: 8px;
-  }
-  .app-layout {
+  .grid-cols-2 {
     grid-template-columns: 1fr;
   }
 }
@@ -144,10 +126,15 @@ a:hover {
 }
 
 /* ====== Títulos y tipografía ====== */
+h1,
 h2,
 h3,
 h4 {
   margin: 0 0 8px;
+}
+h1 {
+  font-size: 24px;
+  font-weight: 800;
 }
 h2 {
   font-size: 16px;
@@ -203,7 +190,6 @@ textarea.input:focus {
 .btn-outline {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 8px;
   padding: 9px 14px;
   border-radius: 10px;
@@ -215,14 +201,17 @@ textarea.input:focus {
     border-color 0.15s ease, opacity 0.15s;
   user-select: none;
   -webkit-user-select: none;
+  white-space: nowrap;
 }
+
 .btn {
   background: var(--brand);
-  color: white;
+  color: #fff;
   border: 1px solid var(--brand-600);
 }
 .btn:hover {
   background: var(--brand-600);
+  color: #fff;
 }
 .btn:active {
   transform: translateY(1px);
@@ -232,24 +221,38 @@ textarea.input:focus {
   cursor: not-allowed;
 }
 
+/* Botón contorno */
 .btn-outline {
   background: transparent;
   color: var(--text);
   border: 1px solid var(--border);
 }
 .btn-outline:hover {
-  border-color: var(--brand);
-  color: var(--brand);
+  border-color: var(--brand-600);
+  background: var(--brand-600); /* fondo azul al hover */
+  color: #fff; /* texto blanco al hover */
 }
 
-/* botón activo (pestañas) */
+/* Estado "activo" para toggles (ej: Local / Online) */
+.btn-active {
+  background: var(--brand);
+  border-color: var(--brand-600);
+  color: #fff;
+}
+.btn-active:hover {
+  background: var(--brand-700);
+  border-color: var(--brand-700);
+  color: #fff;
+}
+
+/* botón activo (para pestañas) */
 .btn-active {
   background: var(--brand);
   color: #ffffff;
   border-color: var(--brand-600);
 }
 
-/* Toolbar compacto (evita “estirones” a toda la altura) */
+/* Toolbar compacto */
 .toolbar {
   display: flex;
   gap: 8px;
@@ -291,7 +294,6 @@ body.theme-light .item.active {
   background: #e0ecff;
 }
 
-/* ====== Chips / badges ====== */
 .chip {
   display: inline-flex;
   align-items: center;
@@ -308,7 +310,7 @@ body.theme-light .chip {
   color: #111827;
 }
 
-/* categorías */
+/* ====== Badges por categoría ====== */
 .badge--rest {
   background: #25151a;
   border-color: #43212b;
@@ -377,4 +379,157 @@ body.theme-light .chip {
 .leaflet-container {
   border-radius: 12px;
   filter: saturate(1.02) contrast(1.02);
+}
+
+/* ====== Landing page (lista de viajes) ====== */
+.landing-root {
+  max-width: 1100px;
+  margin: 0 auto;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.landing-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+.landing-title {
+  font-size: 22px;
+  font-weight: 800;
+}
+.landing-subtitle {
+  font-size: 13px;
+  color: var(--muted);
+}
+.landing-new-trip-button {
+  white-space: nowrap;
+}
+.landing-new-trip-card {
+  max-width: 800px;
+}
+.landing-new-trip-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.landing-new-trip-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.landing-new-trip-actions {
+  grid-column: span 2;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.landing-trips-section {
+  flex: 1;
+  min-height: 0;
+}
+.trips-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .trips-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .trips-grid {
+    grid-template-columns: 1fr;
+  }
+  .landing-new-trip-form {
+    grid-template-columns: 1fr;
+  }
+  .landing-new-trip-actions {
+    grid-column: span 1;
+    justify-content: stretch;
+  }
+}
+
+/* ====== Trip cards ====== */
+.trip-card {
+  display: flex;
+  flex-direction: column;
+  background: #0e141b;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.12s ease, box-shadow 0.12s ease,
+    border-color 0.12s ease, background 0.12s ease;
+}
+body.theme-light .trip-card {
+  background: #ffffff;
+}
+.trip-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+  border-color: var(--brand-600);
+}
+.trip-card-image-wrapper {
+  height: 140px;
+  overflow: hidden;
+}
+.trip-card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.trip-card-image--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #111827;
+  color: var(--muted);
+}
+body.theme-light .trip-card-image--placeholder {
+  background: #e5e7eb;
+}
+.trip-card-body {
+  padding: 10px 12px 12px;
+}
+.trip-card-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+.trip-card-subtitle {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ====== Pantalla de entrada (login/invitado) ====== */
+.entry-root {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.entry-card {
+  max-width: 420px;
+  width: 100%;
+  padding: 24px;
+  border-radius: 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.45);
+}
+.entry-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ====== Header del planner (cuando ya estás en un viaje) ====== */
+.planner-header {
+  margin-bottom: 4px;
 }
