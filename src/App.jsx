@@ -70,30 +70,39 @@ function EntryScreen({ onGuest }) {
   );
 }
 
-function PlannerShell({ trip, onBack, onSave, onLoad }) {
+function PlannerShell({ trip, onBack, onSave, onLoad, onUpdateTripMeta }) {
   const { isSignedIn } = useUser();
 
   return (
     <div className="h-full flex flex-col gap-3">
       <header className="card planner-header">
         <div className="flex justify-between items-center">
-          <div>
-            <button className="btn-outline text-xs mb-1" onClick={onBack}>
+          {/* Botón volver + título EN LA MISMA LÍNEA */}
+          <div className="flex items-center gap-3">
+            <button className="btn-outline text-xs" onClick={onBack}>
               ← Volver a mis viajes
             </button>
             <h2 className="font-semibold">{trip.title}</h2>
-            {trip.subtitle && (
-              <div className="text-xs text-gray-600">{trip.subtitle}</div>
-            )}
           </div>
+
+          {/* Lado derecho: destino + acciones */}
           <div className="flex items-center gap-2">
             {trip.destination && (
               <span className="chip">{trip.destination}</span>
             )}
-            <button className="btn-outline text-xs" onClick={onLoad}>
-              Cargar
+            {/* Renombramos a “Restaurar” para que se entienda mejor */}
+            <button
+              className="btn-outline text-xs"
+              onClick={onLoad}
+              title="Cargar el último guardado de este viaje"
+            >
+              Restaurar
             </button>
-            <button className="btn text-xs" onClick={onSave}>
+            <button
+              className="btn text-xs"
+              onClick={onSave}
+              title="Guardar el estado actual del itinerario"
+            >
               Guardar
             </button>
             {isSignedIn && (
@@ -117,7 +126,8 @@ function PlannerShell({ trip, onBack, onSave, onLoad }) {
         </div>
         <div className="panel overflow-auto">
           <div className="h-full flex flex-col gap-3 p-3">
-            <Sidebar />
+            {/* Pasamos trip y onUpdateTripMeta hacia el Sidebar */}
+            <Sidebar trip={trip} onUpdateTripMeta={onUpdateTripMeta} />
           </div>
         </div>
       </div>
@@ -171,7 +181,7 @@ export default function App() {
     const newTrip = {
       id,
       title: data.title || "New Trip",
-      subtitle: data.subtitle || "",
+      subtitle: "", // ya no la usamos en el AppBar
       destination: data.destination || "Japan",
       coverUrl: data.coverUrl || null,
     };
@@ -185,6 +195,14 @@ export default function App() {
 
   const handleBackToTrips = () => {
     setActiveTripId(null);
+  };
+
+  // 🔧 actualizar metadatos del viaje actual (usado desde Settings)
+  const handleUpdateTripMeta = (patch) => {
+    if (!activeTrip) return;
+    setTrips((prev) =>
+      prev.map((t) => (t.id === activeTrip.id ? { ...t, ...patch } : t))
+    );
   };
 
   // === Guardar según modo (local / online) ===
@@ -269,6 +287,7 @@ export default function App() {
           onBack={handleBackToTrips}
           onSave={handleSave}
           onLoad={handleLoad}
+          onUpdateTripMeta={handleUpdateTripMeta}
         />
       ) : (
         <LandingPage

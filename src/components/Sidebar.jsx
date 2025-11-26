@@ -8,7 +8,7 @@ import MyPlacesPanel from "./MyPlacesPanel";
 import SettingsPanel from "./SettingsPanel";
 import { useItineraryStore } from "../hooks/useItineraryStore";
 
-export default function Sidebar() {
+export default function Sidebar({ trip, onUpdateTripMeta }) {
   const selectedId = useItineraryStore((s) => s.selectedId);
   const ui = useItineraryStore((s) => s.ui);
   const setSidebarTab = useItineraryStore((s) => s.setSidebarTab);
@@ -71,7 +71,10 @@ export default function Sidebar() {
 
       {ui.sidebarTab === "myplaces" && <MyPlacesPanel />}
       {ui.sidebarTab === "finance" && <FinancePanel />}
-      {ui.sidebarTab === "settings" && <SettingsPanel />}
+
+      {ui.sidebarTab === "settings" && (
+        <SettingsPanel trip={trip} onUpdateTripMeta={onUpdateTripMeta} />
+      )}
 
       {/* Editor si hay un lugar seleccionado */}
       {selectedId && (
