@@ -13,14 +13,13 @@ export default function Sidebar() {
   const setSidebarTab = useItineraryStore((s) => s.setSidebarTab);
 
   const tabClass = (tab) =>
-    "sidebar-tab-btn " +
-    (ui.sidebarTab === tab ? "sidebar-tab-btn--active" : "");
+    "btn-outline flex-1 text-xs " + (ui.sidebarTab === tab ? "btn-active" : "");
 
   return (
     <div className="h-full w-full flex flex-col gap-3">
       {/* Menú de pestañas */}
       <div className="card">
-        <div className="sidebar-tabs">
+        <div className="flex gap-2 flex-wrap">
           <button
             className={tabClass("itinerary")}
             onClick={() => setSidebarTab("itinerary")}

@@ -14,10 +14,9 @@ function todayISO() {
 const D0 = todayISO();
 
 export const useItineraryStore = create((set, get) => ({
-  // ===== Datos base =====
-  // Sin ejemplos: empezamos vacío
+  // ===== Datos base (SIN ejemplos) =====
   places: [], // el orden del array define el orden visual
-  routes: [],
+  routes: [], // {id,type:'route',date,fromId,toId,mode,geojson?,name?,durationMin?,priceJPY?}
 
   days: [D0],
   selectedDate: D0,
@@ -50,10 +49,7 @@ export const useItineraryStore = create((set, get) => ({
   setTheme: (theme) => set((s) => ({ ui: { ...s.ui, theme } })),
   toggleTheme: () =>
     set((s) => ({
-      ui: {
-        ...s.ui,
-        theme: s.ui.theme === "light" ? "dark" : "light",
-      },
+      ui: { ...s.ui, theme: s.ui.theme === "light" ? "dark" : "light" },
     })),
   setStorageMode: (mode) =>
     set((s) => ({ ui: { ...s.ui, storageMode: mode } })),
@@ -160,7 +156,6 @@ export const useItineraryStore = create((set, get) => ({
         .map((id) => same.find((p) => p.id === id))
         .filter(Boolean);
 
-      // pares consecutivos del nuevo orden
       const newPairs = new Set(
         ordered
           .map((p, i) =>
@@ -168,7 +163,6 @@ export const useItineraryStore = create((set, get) => ({
           )
           .filter(Boolean)
       );
-      // preserva rutas que sigan conectando pares consecutivos
       const keepRoutes = s.routes.filter(
         (r) => r.date !== date || newPairs.has(`${r.fromId}|${r.toId}`)
       );
@@ -248,7 +242,6 @@ export const useItineraryStore = create((set, get) => ({
         ? data.days
         : [...new Set((data.places || []).map((p) => p.date).filter(Boolean))];
 
-    // mantenemos la UI actual (tema, storageMode, pestañas, etc.)
     const prevUi = get().ui;
 
     set({

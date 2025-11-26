@@ -2,11 +2,13 @@
 import { useEffect, useState } from "react";
 import { useUser, SignInButton, UserButton } from "@clerk/clerk-react";
 import { createClient } from "@supabase/supabase-js";
+
 import MapPanel from "./components/MapPanel";
 import Sidebar from "./components/Sidebar";
 import LandingPage from "./components/LandingPage";
 import ImportExport from "./components/ImportExport";
 import { useItineraryStore } from "./hooks/useItineraryStore";
+
 import "./styles.css";
 
 /* ========= Cliente Supabase ========= */
@@ -51,7 +53,7 @@ function loadTripLocal(tripId) {
 
 /* ========= Helpers ONLINE (Supabase) ========= */
 
-async function saveTripOnline({ tripId, userId, data }) {
+async function saveTripOnline({ tripId, title, userId, data }) {
   if (!supabase) {
     const error = new Error(
       "Supabase no está configurado. Revisa VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY."
@@ -64,13 +66,14 @@ async function saveTripOnline({ tripId, userId, data }) {
     const payload = {
       trip_id: tripId,
       user_id: userId ?? null,
+      title: title ?? null,
       data,
     };
 
     const { data: upserted, error } = await supabase
       .from("trip_data")
       .upsert(payload, { onConflict: "trip_id" })
-      .select("trip_id, updated_at")
+      .select("trip_id, title, updated_at")
       .single();
 
     if (error) {
@@ -126,13 +129,31 @@ async function loadTripOnline({ tripId, userId }) {
   }
 }
 
+/** Lista todos los viajes de un usuario (solo metadatos) */
+async function listTripsOnline(userId) {
+  if (!supabase || !userId) return { ok: false, data: [], error: null };
+
+  const { data, error } = await supabase
+    .from("trip_data")
+    .select("trip_id, title, updated_at")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    console.error("[Supabase] listTripsOnline error:", error);
+    return { ok: false, data: [], error };
+  }
+
+  return { ok: true, data, error: null };
+}
+
 /* ========= Componentes de UI ========= */
 
 function EntryScreen({ onGuest }) {
   return (
     <div className="entry-root">
       <div className="entry-card">
-        <h1 className="landing-title mb-2">Dibu trip planner</h1>
+        <h1 className="landing-title mb-2">Dibu Trip Planner</h1>
         <p className="landing-subtitle mb-3">
           Organiza tus días, lugares y gastos en un solo lugar.
         </p>
@@ -160,9 +181,10 @@ function PlannerShell({ trip, onBack, onSave, onLoad }) {
 
   return (
     <div className="h-full flex flex-col gap-3">
+      {/* APP BAR */}
       <header className="card planner-header">
-        <div className="planner-header-row">
-          <div className="planner-header-left">
+        <div className="flex justify-between items-center gap-3">
+          <div className="flex flex-col gap-1">
             <button className="btn-outline text-xs" onClick={onBack}>
               ← Volver a mis viajes
             </button>
@@ -171,22 +193,22 @@ function PlannerShell({ trip, onBack, onSave, onLoad }) {
               {trip.subtitle && (
                 <div className="text-xs text-gray-600">{trip.subtitle}</div>
               )}
+              {trip.destination && (
+                <div className="mt-1">
+                  <span className="chip">{trip.destination}</span>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="planner-header-right">
-            {/* Import / Export JSON en el appbar */}
-            <div className="planner-header-group">
+          <div className="flex items-center gap-3">
+            {/* Import/Export JSON subido al AppBar */}
+            <div className="toolbar">
               <ImportExport />
             </div>
 
-            <div className="planner-header-group">
-              {trip.destination && (
-                <span className="chip">{trip.destination}</span>
-              )}
-            </div>
-
-            <div className="planner-header-group">
+            {/* Separador visual */}
+            <div className="flex items-center gap-2">
               <button className="btn-outline text-xs" onClick={onLoad}>
                 Cargar
               </button>
@@ -196,20 +218,17 @@ function PlannerShell({ trip, onBack, onSave, onLoad }) {
             </div>
 
             {isSignedIn && (
-              <div className="planner-header-group">
-                <UserButton
-                  appearance={{
-                    elements: {
-                      avatarBox: { width: 32, height: 32 },
-                    },
-                  }}
-                />
-              </div>
+              <UserButton
+                appearance={{
+                  elements: { avatarBox: { width: 32, height: 32 } },
+                }}
+              />
             )}
           </div>
         </div>
       </header>
 
+      {/* Layout principal: mapa + sidebar */}
       <div className="h-full grid grid-cols-2 gap-3">
         <div className="panel">
           <div className="h-full">
@@ -226,20 +245,20 @@ function PlannerShell({ trip, onBack, onSave, onLoad }) {
   );
 }
 
+/* ========= App principal ========= */
+
 export default function App() {
   const { isSignedIn, user } = useUser();
   const theme = useItineraryStore((s) => s.ui.theme);
   const storageMode = useItineraryStore((s) => s.ui.storageMode);
   const exportJSON = useItineraryStore((s) => s.exportJSON);
   const importJSON = useItineraryStore((s) => s.importJSON);
-  const clearAll = useItineraryStore((s) => s.clearAll);
 
   const [guest, setGuest] = useState(false);
-  // Sin TRIP_EXAMPLES: empezamos sin viajes
-  const [trips, setTrips] = useState([]);
+  const [trips, setTrips] = useState([]); // sin ejemplos
   const [activeTripId, setActiveTripId] = useState(null);
 
-  // tema claro/oscuro
+  // Tema claro/oscuro
   useEffect(() => {
     if (typeof document === "undefined") return;
     const body = document.body;
@@ -250,49 +269,55 @@ export default function App() {
     }
   }, [theme]);
 
+  // Cargar lista de viajes ONLINE cuando el usuario está logueado
+  useEffect(() => {
+    const fetchTrips = async () => {
+      if (!isSignedIn || !user?.id) return;
+      if (storageMode !== "online") return;
+
+      const result = await listTripsOnline(user.id);
+      if (!result.ok) {
+        console.warn("[App] No se pudo cargar lista de viajes:", result.error);
+        return;
+      }
+
+      const mapped = result.data.map((row) => ({
+        id: row.trip_id,
+        title: row.title || "Viaje sin título",
+        subtitle: "",
+        destination: "",
+      }));
+
+      setTrips(mapped);
+    };
+
+    fetchTrips();
+  }, [isSignedIn, user?.id, storageMode]);
+
   const canEnter = isSignedIn || guest;
   const activeTrip = trips.find((t) => t.id === activeTripId) || null;
 
   const handleAddTrip = (data) => {
     const id = `trip-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
     const newTrip = { id, ...data };
+
     setTrips((prev) => [...prev, newTrip]);
+
+    // Nuevo viaje => planner vacío
+    useItineraryStore.getState().clearAll();
+
     setActiveTripId(id);
-    // Nuevo viaje debe empezar vacío
-    clearAll();
   };
 
-  const handleEnterTrip = async (id) => {
+  const handleEnterTrip = (id) => {
     setActiveTripId(id);
-
-    // Al cambiar de viaje, intentamos cargar sus datos.
-    // Si no hay nada guardado, limpiamos el store para que empiece vacío.
-    if (storageMode === "local") {
-      const payload = loadTripLocal(id);
-      if (payload) {
-        importJSON(JSON.stringify(payload));
-      } else {
-        clearAll();
-      }
-    } else {
-      const result = await loadTripOnline({
-        tripId: id,
-        userId: user?.id ?? null,
-      });
-
-      if (result.ok) {
-        importJSON(JSON.stringify(result.data));
-      } else {
-        clearAll();
-      }
-    }
   };
 
   const handleBackToTrips = () => {
     setActiveTripId(null);
   };
 
-  // === Guardar según modo (local / online) ===
+  // Guardar según modo (local / online)
   const handleSave = async () => {
     if (!activeTrip) {
       alert("No hay viaje activo para guardar.");
@@ -308,6 +333,7 @@ export default function App() {
     } else {
       const result = await saveTripOnline({
         tripId: activeTrip.id,
+        title: activeTrip.title,
         userId: user?.id ?? null,
         data,
       });
@@ -326,7 +352,7 @@ export default function App() {
     }
   };
 
-  // === Cargar según modo (local / online) ===
+  // Cargar según modo (local / online)
   const handleLoad = async () => {
     if (!activeTrip) {
       alert("No hay viaje activo para cargar.");
