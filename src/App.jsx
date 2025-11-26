@@ -1,11 +1,11 @@
 // src/App.jsx
 import { useEffect, useState } from "react";
 import { useUser, SignInButton, UserButton } from "@clerk/clerk-react";
-import { createClient } from "@supabase/supabase-js"; // <- Supabase aquí
+import { createClient } from "@supabase/supabase-js";
 import MapPanel from "./components/MapPanel";
 import Sidebar from "./components/Sidebar";
 import LandingPage from "./components/LandingPage";
-import { TRIP_EXAMPLES } from "./constants/trips";
+import ImportExport from "./components/ImportExport";
 import { useItineraryStore } from "./hooks/useItineraryStore";
 import "./styles.css";
 
@@ -132,7 +132,7 @@ function EntryScreen({ onGuest }) {
   return (
     <div className="entry-root">
       <div className="entry-card">
-        <h1 className="landing-title mb-2">Planner de viajes</h1>
+        <h1 className="landing-title mb-2">Dibu trip planner</h1>
         <p className="landing-subtitle mb-3">
           Organiza tus días, lugares y gastos en un solo lugar.
         </p>
@@ -161,34 +161,50 @@ function PlannerShell({ trip, onBack, onSave, onLoad }) {
   return (
     <div className="h-full flex flex-col gap-3">
       <header className="card planner-header">
-        <div className="flex justify-between items-center">
-          <div>
-            <button className="btn-outline text-xs mb-1" onClick={onBack}>
+        <div className="planner-header-row">
+          <div className="planner-header-left">
+            <button className="btn-outline text-xs" onClick={onBack}>
               ← Volver a mis viajes
             </button>
-            <h2 className="font-semibold">{trip.title}</h2>
-            {trip.subtitle && (
-              <div className="text-xs text-gray-600">{trip.subtitle}</div>
-            )}
+            <div>
+              <h2 className="font-semibold">{trip.title}</h2>
+              {trip.subtitle && (
+                <div className="text-xs text-gray-600">{trip.subtitle}</div>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            {trip.destination && (
-              <span className="chip">{trip.destination}</span>
-            )}
-            <button className="btn-outline text-xs" onClick={onLoad}>
-              Cargar
-            </button>
-            <button className="btn text-xs" onClick={onSave}>
-              Guardar
-            </button>
+
+          <div className="planner-header-right">
+            {/* Import / Export JSON en el appbar */}
+            <div className="planner-header-group">
+              <ImportExport />
+            </div>
+
+            <div className="planner-header-group">
+              {trip.destination && (
+                <span className="chip">{trip.destination}</span>
+              )}
+            </div>
+
+            <div className="planner-header-group">
+              <button className="btn-outline text-xs" onClick={onLoad}>
+                Cargar
+              </button>
+              <button className="btn text-xs" onClick={onSave}>
+                Guardar
+              </button>
+            </div>
+
             {isSignedIn && (
-              <UserButton
-                appearance={{
-                  elements: {
-                    avatarBox: { width: 32, height: 32 },
-                  },
-                }}
-              />
+              <div className="planner-header-group">
+                <UserButton
+                  appearance={{
+                    elements: {
+                      avatarBox: { width: 32, height: 32 },
+                    },
+                  }}
+                />
+              </div>
             )}
           </div>
         </div>
@@ -216,9 +232,11 @@ export default function App() {
   const storageMode = useItineraryStore((s) => s.ui.storageMode);
   const exportJSON = useItineraryStore((s) => s.exportJSON);
   const importJSON = useItineraryStore((s) => s.importJSON);
+  const clearAll = useItineraryStore((s) => s.clearAll);
 
   const [guest, setGuest] = useState(false);
-  const [trips, setTrips] = useState(TRIP_EXAMPLES);
+  // Sin TRIP_EXAMPLES: empezamos sin viajes
+  const [trips, setTrips] = useState([]);
   const [activeTripId, setActiveTripId] = useState(null);
 
   // tema claro/oscuro
@@ -240,10 +258,34 @@ export default function App() {
     const newTrip = { id, ...data };
     setTrips((prev) => [...prev, newTrip]);
     setActiveTripId(id);
+    // Nuevo viaje debe empezar vacío
+    clearAll();
   };
 
-  const handleEnterTrip = (id) => {
+  const handleEnterTrip = async (id) => {
     setActiveTripId(id);
+
+    // Al cambiar de viaje, intentamos cargar sus datos.
+    // Si no hay nada guardado, limpiamos el store para que empiece vacío.
+    if (storageMode === "local") {
+      const payload = loadTripLocal(id);
+      if (payload) {
+        importJSON(JSON.stringify(payload));
+      } else {
+        clearAll();
+      }
+    } else {
+      const result = await loadTripOnline({
+        tripId: id,
+        userId: user?.id ?? null,
+      });
+
+      if (result.ok) {
+        importJSON(JSON.stringify(result.data));
+      } else {
+        clearAll();
+      }
+    }
   };
 
   const handleBackToTrips = () => {

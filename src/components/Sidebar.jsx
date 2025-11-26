@@ -1,7 +1,6 @@
 // src/components/Sidebar.jsx
 import ItineraryList from "./ItineraryList";
 import PlaceForm from "./PlaceForm";
-import ImportExport from "./ImportExport";
 import DaySelector from "./day/DaySelector";
 import FinancePanel from "./finance/FinancePanel";
 import MyPlacesPanel from "./MyPlacesPanel";
@@ -14,18 +13,14 @@ export default function Sidebar() {
   const setSidebarTab = useItineraryStore((s) => s.setSidebarTab);
 
   const tabClass = (tab) =>
-    "btn-outline flex-1 text-xs " + (ui.sidebarTab === tab ? "btn-active" : "");
+    "sidebar-tab-btn " +
+    (ui.sidebarTab === tab ? "sidebar-tab-btn--active" : "");
 
   return (
     <div className="h-full w-full flex flex-col gap-3">
-      {/* Import/Export siempre arriba */}
-      <div className="toolbar card">
-        <ImportExport />
-      </div>
-
       {/* Menú de pestañas */}
       <div className="card">
-        <div className="flex gap-2 flex-wrap">
+        <div className="sidebar-tabs">
           <button
             className={tabClass("itinerary")}
             onClick={() => setSidebarTab("itinerary")}

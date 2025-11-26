@@ -13,62 +13,11 @@ function todayISO() {
 }
 const D0 = todayISO();
 
-// Lugares de ejemplo para arrancar
-const examplePlaces = [
-  {
-    id: uuid(),
-    type: "place",
-    name: "Senso-ji",
-    category: "atraccion",
-    lat: 35.714765,
-    lng: 139.796655,
-    startTime: "09:00",
-    durationMin: 90,
-    priceRange: "gratis",
-    sourceUrl: "https://ja.wikipedia.org/wiki/%E6%B5%85%E8%8D%89%E5%AF%BA",
-    notes: "Templo icónico en Asakusa.",
-    spendJPY: 0,
-    date: D0,
-    images: [],
-  },
-  {
-    id: uuid(),
-    type: "place",
-    name: "Akihabara (BookOff)",
-    category: "bookoff",
-    lat: 35.698683,
-    lng: 139.773167,
-    startTime: "11:00",
-    durationMin: 120,
-    priceRange: "¥ - ¥¥",
-    sourceUrl: "https://www.bookoff.co.jp/",
-    notes: "Cazar ofertas.",
-    spendJPY: 2000,
-    date: D0,
-    images: [],
-  },
-  {
-    id: uuid(),
-    type: "place",
-    name: "Ichiran Ramen Shinjuku",
-    category: "restaurante",
-    lat: 35.6938,
-    lng: 139.7034,
-    startTime: "14:00",
-    durationMin: 60,
-    priceRange: "¥¥",
-    sourceUrl: "https://ichiran.com/",
-    notes: "Botón de menú.",
-    spendJPY: 1500,
-    date: D0,
-    images: [],
-  },
-];
-
 export const useItineraryStore = create((set, get) => ({
   // ===== Datos base =====
-  places: examplePlaces, // el orden del array define el orden visual
-  routes: [], // {id,type:'route',date,fromId,toId,mode,geojson?,name?,durationMin?,priceJPY?}
+  // Sin ejemplos: empezamos vacío
+  places: [], // el orden del array define el orden visual
+  routes: [],
 
   days: [D0],
   selectedDate: D0,
