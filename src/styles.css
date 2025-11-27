@@ -585,3 +585,87 @@ body.theme-light .trip-card-image--placeholder {
   border-color: var(--brand-600);
   color: #fff;
 }
+.itinerary-handle {
+  background: var(--card);
+}
+
+/* ====== Planner AppBar mejorado ====== */
+
+.planner-appbar {
+  background: linear-gradient(90deg, #020617, #0f172a 30%, #1d4ed8 80%);
+  color: #f9fafb;
+  padding: 8px 16px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.45);
+}
+
+.planner-appbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.planner-appbar-title-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.planner-appbar-trip-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.planner-appbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.planner-appbar-chip {
+  background: rgba(15, 23, 42, 0.8);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+}
+
+.planner-appbar-status {
+  background: rgba(15, 23, 42, 0.35);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  border: 1px solid rgba(191, 219, 254, 0.7);
+}
+
+/* Botones en AppBar sobre fondo oscuro */
+.planner-appbar .btn-outline {
+  background: rgba(15, 23, 42, 0.4);
+  color: #e5e7eb;
+  border-color: rgba(148, 163, 184, 0.7);
+}
+
+.planner-appbar .btn-outline:hover {
+  background: rgba(15, 23, 42, 0.7);
+}
+
+/* ====== Badges en tema claro (para que "Otro" se vea mejor) ====== */
+body.theme-light .badge--other {
+  background: #e5e7eb;
+  border-color: #cbd5f5;
+  color: #111827;
+}
+
+/* si quieres, puedes hacer algo similar con las demás categorías */
+body.theme-light .badge--rest,
+body.theme-light .badge--shop,
+body.theme-light .badge--super,
+body.theme-light .badge--book,
+body.theme-light .badge--attr,
+body.theme-light .badge--cafe,
+body.theme-light .badge--hotel {
+  border-color: #d1d5db;
+}

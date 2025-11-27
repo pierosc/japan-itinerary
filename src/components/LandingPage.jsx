@@ -2,160 +2,159 @@
 import { useState } from "react";
 import TripCard from "./TripCard";
 
-export default function LandingPage({ trips, onEnterTrip, onAddTrip }) {
-  const [showNewForm, setShowNewForm] = useState(false);
+function NewTripDialog({ open, onClose, onCreate }) {
   const [title, setTitle] = useState("");
-  const [subtitle, setSubtitle] = useState("");
-  const [destination, setDestination] = useState("");
-  const [coverImage, setCoverImage] = useState("");
-  const [mapCenterText, setMapCenterText] = useState("");
+  const [destination, setDestination] = useState("Japan");
+  const [imageUrl, setImageUrl] = useState("");
+
+  if (!open) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!title.trim()) {
-      alert("Ponle al menos un nombre al viaje 🙂");
-      return;
-    }
-
-    let mapCenter = null;
-    if (mapCenterText.trim()) {
-      const [latStr, lngStr] = mapCenterText.split(",").map((s) => s.trim());
-      const lat = Number(latStr);
-      const lng = Number(lngStr);
-      if (!isNaN(lat) && !isNaN(lng)) {
-        mapCenter = [lat, lng];
-      }
-    }
-
-    onAddTrip({
-      title: title.trim(),
-      subtitle: subtitle.trim() || "",
-      destination: destination.trim() || "",
-      coverImage: coverImage.trim() || "",
-      mapCenter,
+    onCreate({
+      title: title.trim() || "Sin título",
+      destination: destination.trim() || "Japan",
+      imageUrl: imageUrl.trim() || null,
     });
-
-    // limpiar
     setTitle("");
-    setSubtitle("");
-    setDestination("");
-    setCoverImage("");
-    setMapCenterText("");
-    setShowNewForm(false);
+    setDestination("Japan");
+    setImageUrl("");
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15,23,42,0.65)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 40,
+      }}
+    >
+      <div
+        className="panel"
+        style={{
+          maxWidth: 480,
+          width: "100%",
+          padding: 20,
+        }}
+      >
+        <h2 style={{ marginBottom: 12 }}>Crear nuevo viaje</h2>
+        <p className="text-xs" style={{ marginBottom: 12 }}>
+          Define un título, el destino y opcionalmente una imagen que usaremos
+          en la tarjeta y en el encabezado del planner.
+        </p>
+
+        <form onSubmit={handleSubmit} className="landing-new-trip-form">
+          <label>
+            <span className="text-xs">Nombre del viaje</span>
+            <input
+              className="input"
+              placeholder="Ej. Japón 2026 con amigos"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </label>
+          <label>
+            <span className="text-xs">Destino / país</span>
+            <input
+              className="input"
+              placeholder="Japan"
+              value={destination}
+              onChange={(e) => setDestination(e.target.value)}
+            />
+          </label>
+          <label style={{ gridColumn: "span 2" }}>
+            <span className="text-xs">URL de imagen (opcional)</span>
+            <input
+              className="input"
+              placeholder="https://..."
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+            />
+            <span className="text-xs">
+              Puede ser una foto de Unsplash, tu blog, etc.
+            </span>
+          </label>
+
+          <div className="landing-new-trip-actions">
+            <button type="button" className="btn-outline" onClick={onClose}>
+              Cancelar
+            </button>
+            <button type="submit" className="btn">
+              Crear viaje
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export default function LandingPage({
+  trips,
+  onEnterTrip,
+  onAddTrip,
+  isLoadingTrips,
+}) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const handleCreate = (data) => {
+    onAddTrip(data);
+    setDialogOpen(false);
   };
 
   return (
     <div className="landing-root">
-      <header className="landing-header">
+      {/* Encabezado */}
+      <div className="landing-header">
         <div>
-          <h1 className="landing-title">Tus viajes planificados</h1>
-          <p className="landing-subtitle">
-            Elige un viaje para continuar planificando o crea uno nuevo.
-          </p>
+          <div className="landing-title">dibu trip planner</div>
+          <div className="landing-subtitle">
+            Organiza tus viajes con días, lugares, gastos y packing list. Tus
+            viajes se guardan en tu cuenta para que puedas retomarlos cuando
+            quieras.
+          </div>
         </div>
-
         <button
           className="btn landing-new-trip-button"
-          onClick={() => setShowNewForm((v) => !v)}
+          onClick={() => setDialogOpen(true)}
         >
-          + Planificar nuevo viaje
+          + Nuevo viaje
         </button>
-      </header>
+      </div>
 
-      {showNewForm && (
-        <div className="card landing-new-trip-card">
-          <h2 className="font-semibold mb-2">Nuevo viaje</h2>
-          <form
-            onSubmit={handleSubmit}
-            className="landing-new-trip-form"
-            autoComplete="off"
-          >
-            <label>
-              <span className="text-xs">Nombre del viaje *</span>
-              <input
-                className="input"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="p. ej. Japón 2026 con amigos"
-              />
-            </label>
-
-            <label>
-              <span className="text-xs">Subtítulo (opcional)</span>
-              <input
-                className="input"
-                value={subtitle}
-                onChange={(e) => setSubtitle(e.target.value)}
-                placeholder="p. ej. Tokio · Kioto · Osaka"
-              />
-            </label>
-
-            <label>
-              <span className="text-xs">Destino (visible en la card)</span>
-              <input
-                className="input"
-                value={destination}
-                onChange={(e) => setDestination(e.target.value)}
-                placeholder="p. ej. Japón"
-              />
-            </label>
-
-            <label>
-              <span className="text-xs">URL de imagen de fondo</span>
-              <input
-                className="input"
-                value={coverImage}
-                onChange={(e) => setCoverImage(e.target.value)}
-                placeholder="URL de una foto (Unsplash, etc.)"
-              />
-            </label>
-
-            <label>
-              <span className="text-xs">
-                Centro del mapa (lat,lng) – opcional
-              </span>
-              <input
-                className="input"
-                value={mapCenterText}
-                onChange={(e) => setMapCenterText(e.target.value)}
-                placeholder="35.681236, 139.767125"
-              />
-            </label>
-
-            <div className="landing-new-trip-actions">
-              <button
-                type="button"
-                className="btn-outline"
-                onClick={() => setShowNewForm(false)}
-              >
-                Cancelar
-              </button>
-              <button type="submit" className="btn">
-                Crear viaje
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      <section className="landing-trips-section">
-        {trips.length === 0 ? (
-          <p className="text-xs">
-            Aún no tienes viajes. Crea uno con &quot;Planificar nuevo
-            viaje&quot;.
-          </p>
+      {/* Estado de carga / vacío */}
+      <div className="landing-trips-section">
+        {isLoadingTrips ? (
+          <div className="text-xs text-gray-600">
+            Cargando tus viajes desde la nube...
+          </div>
+        ) : trips.length === 0 ? (
+          <div className="panel" style={{ padding: 20, marginTop: 12 }}>
+            <h3 className="font-semibold">Aún no tienes viajes</h3>
+            <p className="text-xs">
+              Haz clic en <strong>“Nuevo viaje”</strong> para crear el primero.
+              Podrás añadir días, lugares, gastos y una lista de cosas para
+              llevar.
+            </p>
+          </div>
         ) : (
-          <div className="trips-grid">
-            {trips.map((trip) => (
-              <TripCard
-                key={trip.id}
-                trip={trip}
-                onClick={() => onEnterTrip(trip.id)}
-              />
+          <div className="trips-grid" style={{ marginTop: 12 }}>
+            {trips.map((t) => (
+              <TripCard key={t.id} trip={t} onClick={() => onEnterTrip(t.id)} />
             ))}
           </div>
         )}
-      </section>
+      </div>
+
+      <NewTripDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        onCreate={handleCreate}
+      />
     </div>
   );
 }

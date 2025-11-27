@@ -15,7 +15,6 @@ const D0 = todayISO();
 
 export const useItineraryStore = create((set, get) => ({
   // ===== Datos base =====
-  // Sin ejemplos: arrancamos vacío
   places: [],
   routes: [],
 
@@ -26,16 +25,28 @@ export const useItineraryStore = create((set, get) => ({
   // Conversión de moneda
   currency: { code: "USD", ratePerJPY: 0.0065 },
 
+  // Packing list
+  packingItems: [
+    { id: uuid(), label: "Pasaporte", done: false },
+    { id: uuid(), label: "Tarjeta de embarque / QR", done: false },
+    { id: uuid(), label: "Tarjeta de débito/crédito", done: false },
+  ],
+
+  // Colaboradores (UI-only, no hay backend todavía)
+  collaborators: [], // { id, nameOrEmail }
+
   // ===== UI global =====
   ui: {
     showMap: true,
     financeOpen: false,
     routeVisible: true,
-    basemap: "esri-worldgray",
+    basemap: "esri-worldstreet",
     mapTilerKey: "",
-    sidebarTab: "itinerary", // itinerary | myplaces | finance | settings
-    theme: "light", // -> claro por defecto
-    storageMode: "online", // -> online (Supabase) por defecto
+    sidebarTab: "itinerary", // itinerary | myplaces | finance | settings | users | packing
+    theme: "light", // light por defecto
+    storageMode: "online", // "local" | "online" (online por defecto)
+    autoSaveEnabled: true,
+    autoSaveIntervalMin: 3,
   },
 
   // ====== Acciones UI ======
@@ -57,6 +68,12 @@ export const useItineraryStore = create((set, get) => ({
     })),
   setStorageMode: (mode) =>
     set((s) => ({ ui: { ...s.ui, storageMode: mode } })),
+  setAutoSaveEnabled: (v) =>
+    set((s) => ({ ui: { ...s.ui, autoSaveEnabled: v } })),
+  setAutoSaveInterval: (min) =>
+    set((s) => ({
+      ui: { ...s.ui, autoSaveIntervalMin: Number(min) || 1 },
+    })),
 
   // ====== Días ======
   setSelectedDate: (date) => {
@@ -115,7 +132,7 @@ export const useItineraryStore = create((set, get) => ({
       selectedId: s.selectedId === id ? null : s.selectedId,
     })),
 
-  // ====== My Places (lugares sin día asignado) ======
+  // ====== My Places ======
   unassignedPlaces: () => {
     const { places } = get();
     return places.filter((p) => !p.date);
@@ -150,7 +167,7 @@ export const useItineraryStore = create((set, get) => ({
       };
     }),
 
-  // ====== Reordenar lugares en un día ======
+  // ====== Reordenar lugares ======
   reorderPlacesForDate: (date, orderedIds) =>
     set((s) => {
       const others = s.places.filter((p) => p.date !== date);
@@ -166,7 +183,6 @@ export const useItineraryStore = create((set, get) => ({
           )
           .filter(Boolean)
       );
-
       const keepRoutes = s.routes.filter(
         (r) => r.date !== date || newPairs.has(`${r.fromId}|${r.toId}`)
       );
@@ -190,6 +206,39 @@ export const useItineraryStore = create((set, get) => ({
 
   removeRoute: (id) =>
     set((s) => ({ routes: s.routes.filter((r) => r.id !== id) })),
+
+  // ====== Packing list ======
+  addPackingItem: (label) =>
+    set((s) => ({
+      packingItems: [
+        ...s.packingItems,
+        { id: uuid(), label: label.trim(), done: false },
+      ],
+    })),
+  togglePackingItem: (id) =>
+    set((s) => ({
+      packingItems: s.packingItems.map((i) =>
+        i.id === id ? { ...i, done: !i.done } : i
+      ),
+    })),
+  removePackingItem: (id) =>
+    set((s) => ({
+      packingItems: s.packingItems.filter((i) => i.id !== id),
+    })),
+  clearPackingList: () => set({ packingItems: [] }),
+
+  // ====== Colaboradores (solo UI) ======
+  addCollaborator: (nameOrEmail) =>
+    set((s) => ({
+      collaborators: [
+        ...s.collaborators,
+        { id: uuid(), nameOrEmail: nameOrEmail.trim() },
+      ],
+    })),
+  removeCollaborator: (id) =>
+    set((s) => ({
+      collaborators: s.collaborators.filter((c) => c.id !== id),
+    })),
 
   // ====== Selectores ======
   placesBySelectedDate: () => {
@@ -219,13 +268,24 @@ export const useItineraryStore = create((set, get) => ({
       selectedId: null,
       days: [todayISO()],
       selectedDate: todayISO(),
+      packingItems: [],
+      collaborators: [],
     }),
 
   exportJSON: () => {
-    const { places, routes, days, selectedDate, currency, ui } = get();
+    const {
+      places,
+      routes,
+      days,
+      selectedDate,
+      currency,
+      ui,
+      packingItems,
+      collaborators,
+    } = get();
     return JSON.stringify(
       {
-        version: 5,
+        version: 6,
         country: "Japan",
         days,
         selectedDate,
@@ -233,6 +293,8 @@ export const useItineraryStore = create((set, get) => ({
         ui,
         places,
         routes,
+        packingItems,
+        collaborators,
       },
       null,
       2
@@ -264,7 +326,21 @@ export const useItineraryStore = create((set, get) => ({
       days: days.length ? days : [todayISO()],
       selectedDate: data.selectedDate ?? days[0] ?? todayISO(),
       currency: data.currency ?? { code: "USD", ratePerJPY: 0.0065 },
-      ui: prevUi,
+      ui: {
+        ...prevUi,
+        autoSaveEnabled:
+          data.ui?.autoSaveEnabled ?? prevUi.autoSaveEnabled ?? true,
+        autoSaveIntervalMin:
+          data.ui?.autoSaveIntervalMin ?? prevUi.autoSaveIntervalMin ?? 3,
+      },
+      packingItems: (data.packingItems || []).map((i) => ({
+        id: i.id ?? uuid(),
+        ...i,
+      })),
+      collaborators: (data.collaborators || []).map((c) => ({
+        id: c.id ?? uuid(),
+        ...c,
+      })),
     });
   },
 

@@ -6,20 +6,22 @@ import DaySelector from "./day/DaySelector";
 import FinancePanel from "./finance/FinancePanel";
 import MyPlacesPanel from "./MyPlacesPanel";
 import SettingsPanel from "./SettingsPanel";
+import UsersPanel from "./UsersPanel";
+import PackingListPanel from "./PackingListPanel";
 import { useItineraryStore } from "../hooks/useItineraryStore";
 
 export default function Sidebar({ trip, onUpdateTripMeta }) {
   const selectedId = useItineraryStore((s) => s.selectedId);
   const ui = useItineraryStore((s) => s.ui);
   const setSidebarTab = useItineraryStore((s) => s.setSidebarTab);
-  const storageMode = ui.storageMode;
+  const storageMode = ui.storageMode || "online";
 
   const tabClass = (tab) =>
     "btn-outline flex-1 text-xs " + (ui.sidebarTab === tab ? "btn-active" : "");
 
   return (
     <div className="h-full w-full flex flex-col gap-3">
-      {/* Import/Export SOLO en modo local */}
+      {/* Import / Export solo si estoy en modo LOCAL */}
       {storageMode === "local" && (
         <div className="toolbar card">
           <ImportExport />
@@ -48,6 +50,18 @@ export default function Sidebar({ trip, onUpdateTripMeta }) {
             Gastos y finanzas
           </button>
           <button
+            className={tabClass("packing")}
+            onClick={() => setSidebarTab("packing")}
+          >
+            Packing list
+          </button>
+          <button
+            className={tabClass("users")}
+            onClick={() => setSidebarTab("users")}
+          >
+            Users
+          </button>
+          <button
             className={tabClass("settings")}
             onClick={() => setSidebarTab("settings")}
           >
@@ -69,14 +83,37 @@ export default function Sidebar({ trip, onUpdateTripMeta }) {
         </>
       )}
 
-      {ui.sidebarTab === "myplaces" && <MyPlacesPanel />}
-      {ui.sidebarTab === "finance" && <FinancePanel />}
-
-      {ui.sidebarTab === "settings" && (
-        <SettingsPanel trip={trip} onUpdateTripMeta={onUpdateTripMeta} />
+      {ui.sidebarTab === "myplaces" && (
+        <div className="card">
+          <MyPlacesPanel />
+        </div>
       )}
 
-      {/* Editor si hay un lugar seleccionado */}
+      {ui.sidebarTab === "finance" && (
+        <div className="card">
+          <FinancePanel />
+        </div>
+      )}
+
+      {ui.sidebarTab === "packing" && (
+        <div className="card">
+          <PackingListPanel />
+        </div>
+      )}
+
+      {ui.sidebarTab === "users" && (
+        <div className="card">
+          <UsersPanel trip={trip} />
+        </div>
+      )}
+
+      {ui.sidebarTab === "settings" && (
+        <div className="card">
+          <SettingsPanel trip={trip} onUpdateTripMeta={onUpdateTripMeta} />
+        </div>
+      )}
+
+      {/* Editor de lugar, siempre abajo si hay seleccionado */}
       {selectedId && (
         <div className="card">
           <PlaceForm />

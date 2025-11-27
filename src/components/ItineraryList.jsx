@@ -380,13 +380,13 @@ export default function ItineraryList() {
                             {...handleProps}
                             role="button"
                             aria-label="arrastrar"
+                            className="itinerary-handle"
                             style={{
                               display: "flex",
                               alignItems: "center",
                               justifyContent: "center",
                               width: 30,
                               borderRadius: 8,
-                              background: "var(--card-2, #0b1220)",
                               cursor: "grab",
                             }}
                             onClick={(e) => e.stopPropagation()}

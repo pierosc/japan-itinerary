@@ -9,13 +9,11 @@ import {
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { useMemo } from "react";
-
 import { useItineraryStore } from "../hooks/useItineraryStore";
 import { JAPAN_BOUNDS } from "../utils/geo";
+import { useMemo, useRef, useState } from "react";
 import SelectedPlaceView from "./SelectedPlaceView";
 
-// ====== Iconos por defecto de Leaflet (para Vite) ======
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl:
@@ -24,37 +22,27 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-// ====== Definición de basemaps ======
+// Basemaps
 const BASEMAPS = (key) => ({
   osm: {
-    name: "OSM (local)",
+    name: "OSM estándar",
     url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attr: "© OpenStreetMap",
-  },
-  osmjp: {
-    name: "OSM Japan (日本語)",
-    url: "https://tile.openstreetmap.jp/{z}/{x}/{y}.png",
-    attr: "© OSM Japan",
+    attr: "© OpenStreetMap contributors",
   },
   "carto-en": {
-    name: "Carto Positron (EN)",
+    name: "Carto Positron",
     url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
     attr: "© CARTO, OSM",
   },
   "carto-dark-en": {
-    name: "Carto DarkMatter (EN)",
+    name: "Carto DarkMatter",
     url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
     attr: "© CARTO, OSM",
   },
-  "esri-worldstreet": {
-    name: "Esri WorldStreet (EN)",
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-    attr: "Tiles © Esri — Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Garmin, FAO, NPS, and the GIS User Community",
-  },
   "esri-worldgray": {
-    name: "Esri WorldGray (EN)",
+    name: "Esri WorldGray",
     url: "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
-    attr: "Tiles © Esri — Esri, DeLorme, NAVTEQ",
+    attr: "Tiles © Esri",
   },
   "maptiler-es": {
     name: "MapTiler (ES)*",
@@ -65,12 +53,16 @@ const BASEMAPS = (key) => ({
   },
 });
 
-// ====== Componente para añadir un punto al hacer click ======
+// === Click para añadir punto (ignora clicks sobre UI) ===
 function ClickToAdd() {
   const addPlace = useItineraryStore((s) => s.addPlace);
 
   useMapEvents({
     click(e) {
+      const target = e.originalEvent?.target;
+      // si el click viene de la capa de controles, no creamos punto
+      if (target && target.closest?.(".map-ui-overlay")) return;
+
       addPlace({
         name: "Nuevo punto",
         category: "otro",
@@ -84,62 +76,119 @@ function ClickToAdd() {
   return null;
 }
 
-// ====== Panel principal del mapa ======
 export default function MapPanel() {
-  // --- Estado base de la store (usando selectores simples) ---
-  const places = useItineraryStore((s) => s.places);
-  const routes = useItineraryStore((s) => s.routes);
-  const selectedDate = useItineraryStore((s) => s.selectedDate);
-  const selectedId = useItineraryStore((s) => s.selectedId);
+  const {
+    placesBySelectedDate,
+    routesBySelectedDate,
+    selectedId,
+    setSelected,
+    updatePlace,
+    ui,
+    setBasemap,
+    toggleRoute,
+    setShowMap,
+  } = useItineraryStore();
 
-  const setSelected = useItineraryStore((s) => s.setSelected);
-  const updatePlace = useItineraryStore((s) => s.updatePlace);
+  const places = placesBySelectedDate();
+  const routes = routesBySelectedDate();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchLoading, setSearchLoading] = useState(false);
+  const mapRef = useRef(null);
 
-  const ui = useItineraryStore((s) => s.ui);
-  const setBasemap = useItineraryStore((s) => s.setBasemap);
-  const toggleRoute = useItineraryStore((s) => s.toggleRoute);
-  const setShowMap = useItineraryStore((s) => s.setShowMap);
-
-  // --- Derivados memoizados: lugares y rutas del día actual ---
-  const placesForDate = useMemo(
-    () => places.filter((p) => p.date === selectedDate),
-    [places, selectedDate]
-  );
-
-  const routesForDate = useMemo(
-    () => routes.filter((r) => r.date === selectedDate),
-    [routes, selectedDate]
-  );
-
-  // --- Bounds iniciales (Japón) ---
   const bounds = useMemo(
     () => L.latLngBounds(JAPAN_BOUNDS.map(([a, b]) => [a, b])),
     []
   );
+  const basemaps = BASEMAPS(ui.mapTilerKey);
+  const bm = basemaps[ui.basemap] || basemaps.osm;
 
-  const bm =
-    BASEMAPS(ui.mapTilerKey)[ui.basemap] || BASEMAPS(ui.mapTilerKey).osm;
-
-  // Si el usuario ocultó el mapa y hay un lugar seleccionado,
-  // mostramos solo la ficha detallada.
+  // Si ocultaste el mapa y hay seleccionado, mostramos ficha
   if (!ui.showMap && selectedId) return <SelectedPlaceView />;
+
+  // === Buscar lugar tipo "Google Maps" con Nominatim ===
+  async function handleSearch(e) {
+    e.preventDefault();
+    if (!searchQuery.trim() || !mapRef.current) return;
+
+    try {
+      setSearchLoading(true);
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+        searchQuery.trim()
+      )}`;
+      const resp = await fetch(url, {
+        headers: { "Accept-Language": "es" },
+      });
+      const data = await resp.json();
+
+      if (!Array.isArray(data) || !data.length) {
+        alert("No se encontraron resultados para esa búsqueda.");
+        return;
+      }
+
+      const best = data[0];
+      const lat = parseFloat(best.lat);
+      const lng = parseFloat(best.lon);
+
+      // centrar mapa
+      mapRef.current.setView([lat, lng], 15);
+
+      // crear punto en el resultado
+      const name = best.display_name?.split(",")[0] || searchQuery.trim();
+      const { addPlace } = useItineraryStore.getState();
+      addPlace({
+        name,
+        category: "otro",
+        lat,
+        lng,
+        notes: `Resultado de búsqueda: ${best.display_name}`,
+      });
+    } catch (err) {
+      console.error("Error buscando lugar:", err);
+      alert("Error al buscar el lugar. Intenta de nuevo.");
+    } finally {
+      setSearchLoading(false);
+    }
+  }
 
   return (
     <div className="h-full w-full" style={{ position: "relative" }}>
-      {/* Controles flotantes del mapa */}
+      {/* CONTROLES SUPERIORES */}
       <div
-        style={{ position: "absolute", right: 12, top: 12, zIndex: 1000 }}
-        className="card"
+        className="card map-ui-overlay"
+        style={{
+          position: "absolute",
+          left: 12,
+          top: 12,
+          zIndex: 1000,
+          maxWidth: 360,
+        }}
       >
+        {/* Buscador de lugares */}
+        <form
+          onSubmit={handleSearch}
+          style={{ display: "flex", gap: 8, marginBottom: 8 }}
+        >
+          <input
+            className="input"
+            placeholder="Buscar lugar (Tokyo Station, Akihabara, ...)"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <button className="btn" type="submit" disabled={searchLoading}>
+            {searchLoading ? "Buscando..." : "Buscar"}
+          </button>
+        </form>
+
+        {/* Basemap + botones */}
         <div className="grid" style={{ gridTemplateColumns: "1fr", gap: 8 }}>
           <label className="text-xs">
-            Basemap
+            Mapa base
             <select
               className="input"
               value={ui.basemap}
               onChange={(e) => setBasemap(e.target.value)}
             >
-              {Object.entries(BASEMAPS(ui.mapTilerKey)).map(([k, v]) => (
+              {Object.entries(basemaps).map(([k, v]) => (
                 <option
                   key={k}
                   value={k}
@@ -153,8 +202,8 @@ export default function MapPanel() {
 
           {ui.basemap === "maptiler-es" && !ui.mapTilerKey && (
             <div className="text-xs">
-              Para tener el mapa en español, añade tu MapTiler key en la
-              configuración y recarga/importa el JSON.
+              Para español, guarda en Settings tu clave de MapTiler
+              (ui.mapTilerKey).
             </div>
           )}
 
@@ -167,18 +216,21 @@ export default function MapPanel() {
         </div>
       </div>
 
-      {/* Mapa */}
+      {/* MAPA */}
       <MapContainer
         bounds={bounds}
         className="h-full w-full rounded-lg"
         scrollWheelZoom
+        whenCreated={(map) => {
+          mapRef.current = map;
+        }}
       >
         {bm.url && <TileLayer attribution={bm.attr} url={bm.url} />}
 
         <ClickToAdd />
 
-        {/* Marcadores de lugares */}
-        {placesForDate.map((p) => (
+        {/* Marcadores */}
+        {places.map((p) => (
           <Marker
             key={p.id}
             position={[p.lat, p.lng]}
@@ -208,13 +260,12 @@ export default function MapPanel() {
           </Marker>
         ))}
 
-        {/* Conectores virtuales entre puntos consecutivos si no hay ruta real */}
+        {/* Conectores virtuales */}
         {ui.routeVisible &&
-          placesForDate.map((p, i) => {
-            const next = placesForDate[i + 1];
+          places.map((p, i) => {
+            const next = places[i + 1];
             if (!next) return null;
-
-            const hasRoute = routesForDate.some(
+            const hasRoute = routes.some(
               (r) => r.fromId === p.id && r.toId === next.id
             );
             if (hasRoute) return null;
@@ -238,9 +289,9 @@ export default function MapPanel() {
 
         {/* Rutas reales */}
         {ui.routeVisible &&
-          routesForDate.map((r) => {
-            const from = placesForDate.find((p) => p.id === r.fromId);
-            const to = placesForDate.find((p) => p.id === r.toId);
+          routes.map((r) => {
+            const from = places.find((p) => p.id === r.fromId);
+            const to = places.find((p) => p.id === r.toId);
             if (!from || !to) return null;
 
             const line =
