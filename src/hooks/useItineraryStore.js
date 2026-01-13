@@ -354,4 +354,10 @@ export const useItineraryStore = create((set, get) => ({
     })),
 
   speedsKmh,
+  // ====== Volver a My places ======
+  unassignPlace: (id) =>
+    set((s) => ({
+      places: s.places.map((p) => (p.id === id ? { ...p, date: null } : p)),
+      selectedId: s.selectedId === id ? null : s.selectedId,
+    })),
 }));

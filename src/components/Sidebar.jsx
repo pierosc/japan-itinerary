@@ -16,19 +16,20 @@ export default function Sidebar({ trip, onUpdateTripMeta }) {
   const setSidebarTab = useItineraryStore((s) => s.setSidebarTab);
   const storageMode = ui.storageMode || "online";
 
+  // 👇 contador de "My places" (lugares sin date)
+  const unassignedCount = useItineraryStore((s) => s.unassignedPlaces().length);
+
   const tabClass = (tab) =>
     "btn-outline flex-1 text-xs " + (ui.sidebarTab === tab ? "btn-active" : "");
 
   return (
     <div className="h-full w-full flex flex-col gap-3">
-      {/* Import / Export solo si estoy en modo LOCAL */}
       {storageMode === "local" && (
         <div className="toolbar card">
           <ImportExport />
         </div>
       )}
 
-      {/* Menú de pestañas */}
       <div className="card">
         <div className="flex gap-2 flex-wrap">
           <button
@@ -37,30 +38,35 @@ export default function Sidebar({ trip, onUpdateTripMeta }) {
           >
             Itinerario
           </button>
+
           <button
             className={tabClass("myplaces")}
             onClick={() => setSidebarTab("myplaces")}
           >
-            My places
+            My places {unassignedCount > 0 ? `(${unassignedCount})` : ""}
           </button>
+
           <button
             className={tabClass("finance")}
             onClick={() => setSidebarTab("finance")}
           >
             Gastos y finanzas
           </button>
+
           <button
             className={tabClass("packing")}
             onClick={() => setSidebarTab("packing")}
           >
             Packing list
           </button>
+
           <button
             className={tabClass("users")}
             onClick={() => setSidebarTab("users")}
           >
             Users
           </button>
+
           <button
             className={tabClass("settings")}
             onClick={() => setSidebarTab("settings")}
@@ -70,13 +76,11 @@ export default function Sidebar({ trip, onUpdateTripMeta }) {
         </div>
       </div>
 
-      {/* Contenido según pestaña */}
       {ui.sidebarTab === "itinerary" && (
         <>
           <div className="card">
             <DaySelector />
           </div>
-
           <div className="card">
             <ItineraryList />
           </div>
@@ -103,6 +107,7 @@ export default function Sidebar({ trip, onUpdateTripMeta }) {
 
       {ui.sidebarTab === "users" && (
         <div className="card">
+          {/* OJO: UsersPanel ahora recibe trip (para id) */}
           <UsersPanel trip={trip} />
         </div>
       )}
@@ -110,13 +115,6 @@ export default function Sidebar({ trip, onUpdateTripMeta }) {
       {ui.sidebarTab === "settings" && (
         <div className="card">
           <SettingsPanel trip={trip} onUpdateTripMeta={onUpdateTripMeta} />
-        </div>
-      )}
-
-      {/* Editor de lugar, siempre abajo si hay seleccionado */}
-      {selectedId && (
-        <div className="card">
-          <PlaceForm />
         </div>
       )}
     </div>

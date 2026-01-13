@@ -669,3 +669,52 @@ body.theme-light .badge--cafe,
 body.theme-light .badge--hotel {
   border-color: #d1d5db;
 }
+
+/* ====== Badges en tema claro (pasteles, no oscuros) ====== */
+body.theme-light .badge--rest {
+  background: #ffe4ea;
+  border-color: #fecdd3;
+  color: #7f1d1d;
+}
+
+body.theme-light .badge--shop {
+  background: #dcfce7;
+  border-color: #bbf7d0;
+  color: #14532d;
+}
+
+body.theme-light .badge--super {
+  background: #fef9c3;
+  border-color: #fde68a;
+  color: #713f12;
+}
+
+body.theme-light .badge--book {
+  background: #ffedd5;
+  border-color: #fed7aa;
+  color: #7c2d12;
+}
+
+body.theme-light .badge--attr {
+  background: #e0e7ff;
+  border-color: #c7d2fe;
+  color: #1e3a8a;
+}
+
+body.theme-light .badge--cafe {
+  background: #f3e8ff;
+  border-color: #e9d5ff;
+  color: #581c87;
+}
+
+body.theme-light .badge--hotel {
+  background: #cffafe;
+  border-color: #a5f3fc;
+  color: #155e75;
+}
+
+body.theme-light .badge--other {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+  color: #111827;
+}

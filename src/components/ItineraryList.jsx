@@ -34,12 +34,39 @@ export default function ItineraryList() {
     removeRoute,
     updateRoute,
     setShowMap,
+
+    // ✅ My places
+    unassignedPlaces,
+    assignPlaceToDay,
+    unassignPlace, // ✅ NUEVO
   } = useItineraryStore();
 
   const [editingRoute, setEditingRoute] = useState(null);
 
+  // ✅ NUEVO: selector simple (1 lugar suelto)
+  const [selectedLooseId, setSelectedLooseId] = useState("");
+
   const places = placesBySelectedDate();
   const routes = routesBySelectedDate();
+  const pool = unassignedPlaces(); // date=null
+
+  const canAddLoose = Boolean(selectedDate) && Boolean(selectedLooseId);
+
+  const handleAddLooseToDay = () => {
+    if (!selectedDate) {
+      alert("Primero selecciona un día en el selector de días.");
+      return;
+    }
+    if (!selectedLooseId) return;
+
+    assignPlaceToDay(selectedLooseId, selectedDate);
+
+    // opcional UX: abrir panel de edición
+    setSelected(selectedLooseId);
+    setShowMap(false);
+
+    setSelectedLooseId("");
+  };
 
   // bloques: ITEM → RUTA → ITEM …
   const blocks = useMemo(() => {
@@ -76,6 +103,7 @@ export default function ItineraryList() {
   }
 
   const numFor = (pId) => idsForDnd.indexOf(pId) + 1;
+
   function distMins(a, b, mode) {
     const d = haversineKm(a, b);
     const spd = speedsKmh[mode] || speedsKmh.walk;
@@ -100,10 +128,10 @@ export default function ItineraryList() {
         geojson = coords.map(([lng, lat]) => [lat, lng]);
       } catch {}
     }
-    // crear por defecto walk y abrir editor
+
     const { addRouteBetween } = useItineraryStore.getState();
     addRouteBetween(selectedDate, a, b, mode, geojson);
-    // ubicar la ruta recién creada
+
     const newRoute = useItineraryStore
       .getState()
       .routesBySelectedDate()
@@ -115,11 +143,7 @@ export default function ItineraryList() {
     return (
       <li
         aria-label="route-line"
-        style={{
-          listStyle: "none",
-          margin: "6px 0",
-          pointerEvents: "none",
-        }}
+        style={{ listStyle: "none", margin: "6px 0", pointerEvents: "none" }}
       >
         <div
           style={{
@@ -135,6 +159,7 @@ export default function ItineraryList() {
           >
             {route ? MODE_ICON[route.mode] || "➡️" : " "}
           </span>
+
           <div
             style={{
               flex: 1,
@@ -143,6 +168,7 @@ export default function ItineraryList() {
               pointerEvents: "none",
             }}
           />
+
           <span
             className="text-xs"
             style={{
@@ -282,6 +308,7 @@ export default function ItineraryList() {
 
   return (
     <>
+      {/* Header */}
       <div
         className="flex"
         style={{
@@ -307,6 +334,42 @@ export default function ItineraryList() {
         </button>
       </div>
 
+      {/* ✅ NUEVO: Selector simple (en vez del panel gigante) */}
+      <div className="card" style={{ padding: 10, marginBottom: 10 }}>
+        <div className="text-xs text-gray-600" style={{ marginBottom: 6 }}>
+          Agregar lugar suelto (My places) al día{" "}
+          <strong>{selectedDate}</strong>
+          {" · "}
+          Sueltos: <strong>{pool.length}</strong>
+        </div>
+
+        <div className="flex" style={{ gap: 8, alignItems: "center" }}>
+          <select
+            className="input"
+            value={selectedLooseId}
+            onChange={(e) => setSelectedLooseId(e.target.value)}
+            style={{ flex: "1 1 auto" }}
+          >
+            <option value="">Selecciona un lugar…</option>
+            {pool.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+
+          <button
+            className="btn-outline text-xs"
+            disabled={!canAddLoose}
+            onClick={handleAddLooseToDay}
+            style={{ whiteSpace: "nowrap" }}
+          >
+            Agregar al día
+          </button>
+        </div>
+      </div>
+
+      {/* Lista DnD (tal cual la tenías) */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -333,13 +396,14 @@ export default function ItineraryList() {
                           }`}
                           onClick={() => {
                             setSelected(p.id);
-                            setShowMap(false); // abrir ficha automáticamente a la izquierda
+                            setShowMap(false);
                           }}
                           style={{
                             display: "grid",
-                            gridTemplateColumns: "1fr auto",
+                            gridTemplateColumns: "1fr auto auto",
                             gap: 8,
-                            cursor: "pointer", // cursor de mano
+                            cursor: "pointer",
+                            alignItems: "center",
                           }}
                         >
                           <div>
@@ -375,7 +439,20 @@ export default function ItineraryList() {
                             )}
                           </div>
 
-                          {/* Handle de arrastre */}
+                          {/* ✅ NUEVO: Botón para mandar a My places */}
+                          <button
+                            className="btn-outline text-xs"
+                            title="Mover a My places"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              unassignPlace(p.id);
+                            }}
+                            style={{ whiteSpace: "nowrap" }}
+                          >
+                            ↩︎ A My places
+                          </button>
+
+                          {/* Handle de arrastre (tu mismo handle) */}
                           <div
                             {...handleProps}
                             role="button"
@@ -412,6 +489,7 @@ export default function ItineraryList() {
                 );
               }
             })}
+
             {!blocks.length && (
               <li className="item text-xs">
                 Sin puntos en este día. Haz click en el mapa o usa “Añadir

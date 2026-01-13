@@ -1,5 +1,8 @@
 // src/components/SettingsPanel.jsx
+import { useEffect, useMemo, useState } from "react";
 import { useItineraryStore } from "../hooks/useItineraryStore";
+import { useUser } from "@clerk/clerk-react";
+import { supabase } from "./lib/supabaseClient";
 
 /**
  * Panel de configuración del viaje:
@@ -8,15 +11,78 @@ import { useItineraryStore } from "../hooks/useItineraryStore";
  * - Tema claro / oscuro -> viene del store (Zustand).
  * - Modo de guardado (local / online) -> también del store.
  *
- * IMPORTANTE:
- *  - Este componente asume que recibe props:
- *      - trip: { id, title, destination, imageUrl, ... }
- *      - onUpdateTripMeta: (patch) => void
+ * EXTRA:
+ * - Botón "Perfil público" para publicar tu perfil en Supabase (profiles)
+ *   y que otros puedan encontrarte en búsquedas.
  */
 export default function SettingsPanel({ trip, onUpdateTripMeta }) {
   const ui = useItineraryStore((s) => s.ui);
   const setTheme = useItineraryStore((s) => s.setTheme);
   const setStorageMode = useItineraryStore((s) => s.setStorageMode);
+
+  const { isSignedIn, user } = useUser();
+
+  const [publicLoading, setPublicLoading] = useState(false);
+  const [publicError, setPublicError] = useState(null);
+  const [isPublic, setIsPublic] = useState(false);
+  const [publicLoaded, setPublicLoaded] = useState(false);
+
+  const theme = ui.theme || "light";
+  const storageMode = ui.storageMode || "online";
+
+  const myProfilePayload = useMemo(() => {
+    if (!user) return null;
+    const email = user.primaryEmailAddress?.emailAddress || null;
+    const fullName =
+      `${user.firstName || ""} ${user.lastName || ""}`.trim() ||
+      user.username ||
+      (email ? email.split("@")[0] : null);
+
+    return {
+      user_id: user.id,
+      email,
+      full_name: fullName,
+      avatar_url: user.imageUrl || null,
+    };
+  }, [user]);
+
+  // Cargar estado actual "is_public" (si existe)
+  useEffect(() => {
+    if (!supabase) return;
+    if (!isSignedIn || !user?.id) return;
+
+    let cancelled = false;
+    setPublicError(null);
+
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("is_public")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (cancelled) return;
+        if (error) {
+          // si no existe row, asumimos false
+          console.warn("[profiles] read is_public error:", error);
+          setIsPublic(false);
+        } else {
+          setIsPublic(Boolean(data?.is_public));
+        }
+        setPublicLoaded(true);
+      } catch (e) {
+        if (cancelled) return;
+        console.warn("[profiles] read exception:", e);
+        setIsPublic(false);
+        setPublicLoaded(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn, user?.id]);
 
   if (!trip) {
     return (
@@ -31,14 +97,44 @@ export default function SettingsPanel({ trip, onUpdateTripMeta }) {
 
   const handleMetaChange = (field) => (e) => {
     const value = e.target.value;
-    // Avisamos hacia arriba para que App actualice el array de trips
     if (typeof onUpdateTripMeta === "function") {
       onUpdateTripMeta({ [field]: value });
     }
   };
 
-  const theme = ui.theme || "light";
-  const storageMode = ui.storageMode || "online";
+  async function setProfilePublic(next) {
+    setPublicError(null);
+
+    if (!supabase) {
+      setPublicError("Supabase no está configurado.");
+      return;
+    }
+    if (!isSignedIn || !user?.id || !myProfilePayload) {
+      setPublicError("Debes iniciar sesión para publicar tu perfil.");
+      return;
+    }
+
+    setPublicLoading(true);
+    try {
+      // upsert tu fila, marcando público/no público
+      const { error } = await supabase.from("profiles").upsert(
+        {
+          ...myProfilePayload,
+          is_public: Boolean(next),
+        },
+        { onConflict: "user_id" }
+      );
+
+      if (error) throw error;
+
+      setIsPublic(Boolean(next));
+    } catch (e) {
+      console.error("[profiles] upsert error:", e);
+      setPublicError(e?.message || "Error actualizando tu perfil.");
+    } finally {
+      setPublicLoading(false);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -97,6 +193,67 @@ export default function SettingsPanel({ trip, onUpdateTripMeta }) {
           Se usa en la tarjeta del viaje y en el app bar. No hace falta guardar
           manualmente: se actualiza al escribir.
         </p>
+      </section>
+
+      {/* PERFIL PUBLICO (para búsquedas y compartir) */}
+      <section className="card" style={{ padding: 12 }}>
+        <h3 className="font-semibold text-xs mb-2">Perfil y búsquedas</h3>
+        <p className="text-xs text-gray-600 mb-2">
+          Si activas esto, tu usuario aparece en las búsquedas para que otras
+          personas te puedan encontrar y compartir viajes contigo.
+        </p>
+
+        {!isSignedIn ? (
+          <div className="text-xs text-gray-600">
+            Inicia sesión para publicar tu perfil.
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-2">
+            <div style={{ minWidth: 0 }}>
+              <div className="font-medium" style={{ fontSize: 13 }}>
+                Perfil público para búsquedas
+              </div>
+              <div className="text-xs text-gray-600">
+                {publicLoaded
+                  ? isPublic
+                    ? "✅ Visible en búsquedas"
+                    : "Oculto en búsquedas"
+                  : "Leyendo estado…"}
+              </div>
+            </div>
+
+            <button
+              className={
+                "btn-outline text-xs " + (isPublic ? "btn-active" : "")
+              }
+              disabled={publicLoading || !publicLoaded}
+              onClick={() => setProfilePublic(!isPublic)}
+              title="Publicar / ocultar perfil"
+            >
+              {publicLoading
+                ? "Guardando…"
+                : isPublic
+                ? "Desactivar"
+                : "Activar"}
+            </button>
+          </div>
+        )}
+
+        {publicError && (
+          <div
+            className="text-xs"
+            style={{ color: "var(--danger)", marginTop: 8 }}
+          >
+            {publicError}
+          </div>
+        )}
+
+        {isSignedIn && myProfilePayload && (
+          <div className="text-xs text-gray-600 mt-2">
+            Publicará: <strong>{myProfilePayload.full_name}</strong>{" "}
+            {myProfilePayload.email ? `(${myProfilePayload.email})` : ""}
+          </div>
+        )}
       </section>
 
       {/* APARIENCIA */}

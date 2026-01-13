@@ -35,11 +35,7 @@ function NewTripDialog({ open, onClose, onCreate }) {
     >
       <div
         className="panel"
-        style={{
-          maxWidth: 480,
-          width: "100%",
-          padding: 20,
-        }}
+        style={{ maxWidth: 480, width: "100%", padding: 20 }}
       >
         <h2 style={{ marginBottom: 12 }}>Crear nuevo viaje</h2>
         <p className="text-xs" style={{ marginBottom: 12 }}>
@@ -57,6 +53,7 @@ function NewTripDialog({ open, onClose, onCreate }) {
               onChange={(e) => setTitle(e.target.value)}
             />
           </label>
+
           <label>
             <span className="text-xs">Destino / país</span>
             <input
@@ -66,6 +63,7 @@ function NewTripDialog({ open, onClose, onCreate }) {
               onChange={(e) => setDestination(e.target.value)}
             />
           </label>
+
           <label style={{ gridColumn: "span 2" }}>
             <span className="text-xs">URL de imagen (opcional)</span>
             <input
@@ -97,7 +95,8 @@ export default function LandingPage({
   trips,
   onEnterTrip,
   onAddTrip,
-  isLoadingTrips,
+  loading,
+  error,
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -108,7 +107,6 @@ export default function LandingPage({
 
   return (
     <div className="landing-root">
-      {/* Encabezado */}
       <div className="landing-header">
         <div>
           <div className="landing-title">dibu trip planner</div>
@@ -118,6 +116,7 @@ export default function LandingPage({
             quieras.
           </div>
         </div>
+
         <button
           className="btn landing-new-trip-button"
           onClick={() => setDialogOpen(true)}
@@ -126,11 +125,17 @@ export default function LandingPage({
         </button>
       </div>
 
-      {/* Estado de carga / vacío */}
       <div className="landing-trips-section">
-        {isLoadingTrips ? (
-          <div className="text-xs text-gray-600">
-            Cargando tus viajes desde la nube...
+        {error ? (
+          <div className="panel" style={{ padding: 16, marginTop: 12 }}>
+            <div className="font-semibold">Error</div>
+            <div className="text-xs">{error}</div>
+          </div>
+        ) : loading ? (
+          <div className="panel" style={{ padding: 16, marginTop: 12 }}>
+            <div className="text-xs text-gray-600">
+              Cargando tus viajes desde la nube...
+            </div>
           </div>
         ) : trips.length === 0 ? (
           <div className="panel" style={{ padding: 20, marginTop: 12 }}>
