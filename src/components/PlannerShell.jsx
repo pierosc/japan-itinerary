@@ -7,19 +7,22 @@ import { useItineraryStore } from "../hooks/useItineraryStore";
 export default function PlannerShell({
   trip,
   onBack,
-  onSave, // botón "Guardar ahora" -> llama a App.handleSave()
-  saveState, // viene desde App
-  saveMessage, // viene desde App
+  onSave,
+  saveState,
+  saveMessage,
   onUpdateTripMeta,
 }) {
   const ui = useItineraryStore((s) => s.ui);
   const storageMode = ui.storageMode || "online";
+  const autoSaveEnabled = ui.autoSaveEnabled !== false;
+  const autoSaveIntervalMin = ui.autoSaveIntervalMin ?? 3;
 
-  // Mensaje default cuando no está guardando, para que SIEMPRE veas algo
   const defaultStatus =
     storageMode === "online"
-      ? "Auto-guardado cada 30s"
-      : "Modo local (no auto-save)";
+      ? autoSaveEnabled
+        ? `Auto-guardado cada ${autoSaveIntervalMin} min`
+        : "Auto-guardado desactivado (manual)"
+      : "Modo local";
 
   return (
     <div className="h-full flex flex-col gap-3">

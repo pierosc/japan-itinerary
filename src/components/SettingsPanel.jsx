@@ -6,19 +6,26 @@ import { supabase } from "./lib/supabaseClient";
 
 /**
  * Panel de configuración del viaje:
- * - Nombre, destino, URL de imagen -> se guardan en el objeto `trip`
- *   llamando a `onUpdateTripMeta`.
- * - Tema claro / oscuro -> viene del store (Zustand).
- * - Modo de guardado (local / online) -> también del store.
+ * - Nombre, destino, URL de imagen -> `trip` via onUpdateTripMeta
+ * - Tema (Zustand)
+ * - Modo de guardado (local/online)
  *
  * EXTRA:
- * - Botón "Perfil público" para publicar tu perfil en Supabase (profiles)
- *   y que otros puedan encontrarte en búsquedas.
+ * - Botón "Perfil público" (profiles.is_public)
+ * - Toggle "Auto-guardado" (ui.autoSaveEnabled + ui.autoSaveIntervalMin)
  */
 export default function SettingsPanel({ trip, onUpdateTripMeta }) {
   const ui = useItineraryStore((s) => s.ui);
   const setTheme = useItineraryStore((s) => s.setTheme);
   const setStorageMode = useItineraryStore((s) => s.setStorageMode);
+
+  // ✅ Ya existen en tu store
+  const autoSaveEnabled = useItineraryStore((s) => s.ui.autoSaveEnabled);
+  const autoSaveIntervalMin = useItineraryStore(
+    (s) => s.ui.autoSaveIntervalMin
+  );
+  const setAutoSaveEnabled = useItineraryStore((s) => s.setAutoSaveEnabled);
+  const setAutoSaveInterval = useItineraryStore((s) => s.setAutoSaveInterval);
 
   const { isSignedIn, user } = useUser();
 
@@ -46,7 +53,7 @@ export default function SettingsPanel({ trip, onUpdateTripMeta }) {
     };
   }, [user]);
 
-  // Cargar estado actual "is_public" (si existe)
+  // Cargar estado actual "is_public"
   useEffect(() => {
     if (!supabase) return;
     if (!isSignedIn || !user?.id) return;
@@ -63,8 +70,8 @@ export default function SettingsPanel({ trip, onUpdateTripMeta }) {
           .maybeSingle();
 
         if (cancelled) return;
+
         if (error) {
-          // si no existe row, asumimos false
           console.warn("[profiles] read is_public error:", error);
           setIsPublic(false);
         } else {
@@ -116,7 +123,6 @@ export default function SettingsPanel({ trip, onUpdateTripMeta }) {
 
     setPublicLoading(true);
     try {
-      // upsert tu fila, marcando público/no público
       const { error } = await supabase.from("profiles").upsert(
         {
           ...myProfilePayload,
@@ -126,7 +132,6 @@ export default function SettingsPanel({ trip, onUpdateTripMeta }) {
       );
 
       if (error) throw error;
-
       setIsPublic(Boolean(next));
     } catch (e) {
       console.error("[profiles] upsert error:", e);
@@ -286,6 +291,7 @@ export default function SettingsPanel({ trip, onUpdateTripMeta }) {
           Elige dónde se guarda el contenido del viaje (lugares, rutas, días,
           etc.).
         </p>
+
         <div className="flex gap-2">
           <button
             className={
@@ -308,10 +314,64 @@ export default function SettingsPanel({ trip, onUpdateTripMeta }) {
         </div>
 
         <p className="text-xs text-gray-600 mt-2">
-          Si el auto-guardado está activo, los cambios se envían automáticamente
-          cada cierto tiempo. El botón “Guardar” solo aparece cuando el modo es
-          manual.
+          Si el auto-guardado está activo, los cambios se envían
+          automáticamente.
         </p>
+      </section>
+
+      {/* ✅ AUTO-GUARDADO */}
+      <section className="card" style={{ padding: 12 }}>
+        <h3 className="font-semibold text-xs mb-2">Auto-guardado</h3>
+        <p className="text-xs text-gray-600 mb-2">
+          Útil si trabajas solo. Si están editando el mismo viaje varias
+          personas, desactívalo y usen “Guardar ahora” para evitar choques.
+        </p>
+
+        <div className="flex items-center justify-between gap-2">
+          <div style={{ minWidth: 0 }}>
+            <div className="font-medium" style={{ fontSize: 13 }}>
+              Auto-guardado (solo modo Online)
+            </div>
+            <div className="text-xs text-gray-600">
+              {storageMode !== "online"
+                ? "No aplica en modo Local"
+                : autoSaveEnabled
+                ? `✅ Activado (cada ${autoSaveIntervalMin} min)`
+                : "Desactivado (manual)"}
+            </div>
+          </div>
+
+          <button
+            className={
+              "btn-outline text-xs " + (autoSaveEnabled ? "btn-active" : "")
+            }
+            disabled={storageMode !== "online"}
+            onClick={() => setAutoSaveEnabled(!autoSaveEnabled)}
+            title="Activar / desactivar auto-guardado"
+          >
+            {autoSaveEnabled ? "Desactivar" : "Activar"}
+          </button>
+        </div>
+
+        {/* Opcional: intervalo visible solo si autosave ON */}
+        {storageMode === "online" && autoSaveEnabled && (
+          <div style={{ marginTop: 10 }}>
+            <label className="text-xs">
+              Intervalo (min)
+              <input
+                type="number"
+                className="input mt-1"
+                min={1}
+                max={60}
+                value={autoSaveIntervalMin ?? 3}
+                onChange={(e) => setAutoSaveInterval(e.target.value)}
+              />
+            </label>
+            <div className="text-xs text-gray-600 mt-1">
+              Recomendado: 3–10 min si estás compartiendo.
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );

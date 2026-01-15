@@ -26,13 +26,18 @@ export default function PlaceEditor({ place }) {
     Number.isNaN(Number(v)) ? fallback : Number(v);
 
   const addImageFromUrl = () => {
-    if (!imgUrl.trim()) return;
+    const url = imgUrl.trim();
+    if (!url) return;
+
+    // validación mínima
+    if (!/^https?:\/\/.+/i.test(url)) {
+      alert("Pon una URL válida que empiece con http:// o https://");
+      return;
+    }
+
     const current = place.images || [];
     updatePlace(place.id, {
-      images: [
-        ...current,
-        { name: imgUrl.split("/").pop() || "imagen", url: imgUrl.trim() },
-      ],
+      images: [...current, { name: url.split("/").pop() || "imagen", url }],
     });
     setImgUrl("");
   };
@@ -203,15 +208,16 @@ export default function PlaceEditor({ place }) {
           />
         </label>
 
-        {/* Imágenes del lugar: archivo + URL */}
+        {/* Imágenes del lugar: SOLO URL */}
         <div className="col-span-2">
-          <span className="text-xs">Imágenes</span>
+          <span className="text-xs">Imágenes (solo URL)</span>
+
           <div
             className="mt-1"
             style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
           >
             {(place.images || []).map((img, i) => {
-              const src = img.dataUrl || img.url;
+              const src = img.url; // ✅ solo url
               return (
                 <div
                   key={i}
@@ -229,6 +235,9 @@ export default function PlaceEditor({ place }) {
                       src={src}
                       alt={img.name || `img-${i}`}
                       style={{ maxWidth: 140, borderRadius: 8 }}
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
                     />
                   ) : (
                     <div className="text-xs" style={{ opacity: 0.7 }}>
@@ -241,6 +250,18 @@ export default function PlaceEditor({ place }) {
                   >
                     {img.name || `imagen ${i + 1}`}
                   </div>
+
+                  {src && (
+                    <a
+                      className="text-xs text-blue-600"
+                      href={src}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Abrir URL
+                    </a>
+                  )}
+
                   <button
                     className="btn-outline"
                     onClick={() => {
@@ -255,32 +276,6 @@ export default function PlaceEditor({ place }) {
               );
             })}
 
-            {/* Subir archivo */}
-            <label className="btn-outline" style={{ cursor: "pointer" }}>
-              + Subir archivo
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = () => {
-                    const current = place.images || [];
-                    updatePlace(place.id, {
-                      images: [
-                        ...current,
-                        { name: file.name, dataUrl: reader.result },
-                      ],
-                    });
-                  };
-                  reader.readAsDataURL(file);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-
             {/* Agregar por URL */}
             <div className="flex" style={{ gap: 8, alignItems: "center" }}>
               <input
@@ -294,6 +289,11 @@ export default function PlaceEditor({ place }) {
                 + Agregar URL
               </button>
             </div>
+          </div>
+
+          <div className="text-xs text-gray-600 mt-2">
+            Tip: usa URLs directas a imagen (terminan en .jpg/.png) o enlaces
+            que permitan hotlink. Si el servidor bloquea, no cargará.
           </div>
         </div>
       </div>

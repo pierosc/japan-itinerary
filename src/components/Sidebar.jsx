@@ -1,6 +1,5 @@
 // src/components/Sidebar.jsx
 import ItineraryList from "./ItineraryList";
-import PlaceForm from "./PlaceForm";
 import ImportExport from "./ImportExport";
 import DaySelector from "./day/DaySelector";
 import FinancePanel from "./finance/FinancePanel";

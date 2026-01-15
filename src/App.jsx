@@ -267,6 +267,23 @@ export default function App() {
     setActiveTripId(null);
   };
 
+  function stripBase64FromExport(data) {
+    if (!data?.places) return data;
+    return {
+      ...data,
+      places: data.places.map((p) => ({
+        ...p,
+        images: (p.images || [])
+          .map((img) => ({
+            name: img.name,
+            url: img.url || null,
+            // NO dataUrl
+          }))
+          .filter((img) => img.url), // deja solo las que tienen url
+      })),
+    };
+  }
+
   // ✅ Guardar (manual o autosave)
   const performSave = async ({ silent = false } = {}) => {
     if (!activeTrip) return;
@@ -280,6 +297,7 @@ export default function App() {
     let data;
     try {
       data = JSON.parse(exportJSON());
+      data = stripBase64FromExport(data);
     } catch (e) {
       console.error("Bad exportJSON", e);
       setSaveState("error");
