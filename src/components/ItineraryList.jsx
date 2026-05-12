@@ -1,5 +1,5 @@
 // src/components/ItineraryList.jsx
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useItineraryStore } from "../hooks/useItineraryStore";
 import { haversineKm } from "../utils/geo";
 import CategoryBadge from "./CategoryBadge";
@@ -54,6 +54,13 @@ export default function ItineraryList() {
 
   const canAddLoose = Boolean(selectedDate) && Boolean(selectedLooseId);
 
+  useEffect(() => {
+    if (selectedLooseId) return;
+    places
+      .filter((p) => p.previewDate)
+      .forEach((p) => updatePlace(p.id, { previewDate: null }));
+  }, [places, selectedLooseId, updatePlace]);
+
   const handleAddLooseToDay = () => {
     if (!selectedDate) {
       alert("Primero selecciona un día en el selector de días.");
@@ -73,10 +80,13 @@ export default function ItineraryList() {
 
   const handleLoosePreview = (id) => {
     setSelectedLooseId(id);
-    if (!id) return;
     places
-      .filter((p) => p.previewDate === selectedDate && p.id !== id)
+      .filter((p) => p.previewDate)
       .forEach((p) => updatePlace(p.id, { previewDate: null }));
+    if (!id) {
+      setSelected(null);
+      return;
+    }
     const place = pool.find((p) => p.id === id);
     if (place && !place.date) {
       updatePlace(id, { previewDate: selectedDate });

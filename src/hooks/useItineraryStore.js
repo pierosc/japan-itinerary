@@ -318,9 +318,11 @@ export const useItineraryStore = create((set, get) => ({
 
   // ====== Selectores ======
   placesBySelectedDate: () => {
-    const { places, selectedDate } = get();
+    const { places, selectedDate, selectedId } = get();
     return places.filter(
-      (p) => p.date === selectedDate || p.previewDate === selectedDate
+      (p) =>
+        p.date === selectedDate ||
+        (p.previewDate === selectedDate && p.id === selectedId)
     );
   },
 
