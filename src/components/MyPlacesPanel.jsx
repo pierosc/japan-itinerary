@@ -17,7 +17,6 @@ export default function MyPlacesPanel() {
   const pool = unassignedPlaces();
 
   const handleAdd = () => {
-    // Coordenadas por defecto (Tokio) / ajusta a lo que quieras
     addUnassignedPlace({
       name: "Nuevo lugar",
       category: "otro",
@@ -40,67 +39,67 @@ export default function MyPlacesPanel() {
     assignPlaceToDay(placeId, selectedDate);
     setSelectedDate(selectedDate);
     setSelected(placeId);
-    setShowMap(false); // abre ficha/edición a la izquierda
+    setShowMap(false);
   };
 
   return (
-    <div className="card">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="font-semibold">My places</h2>
+    <div className="list-panel my-places-panel">
+      <div className="section-heading">
+        <div>
+          <h2 className="font-semibold">My places</h2>
+          <div className="text-xs">
+            {pool.length} lugar/es sin día asignado
+          </div>
+        </div>
         <button className="btn" onClick={handleAdd}>
           + Añadir lugar
         </button>
       </div>
 
-      {!pool.length && (
-        <p className="text-xs text-gray-600">
-          No tienes lugares sueltos. Crea nuevos con el botón “Añadir lugar”.
-        </p>
-      )}
-
-      {pool.length > 0 && (
+      {!pool.length ? (
+        <div className="empty-state">
+          <div className="font-medium">No tienes lugares sueltos</div>
+          <div className="text-xs">
+            Guarda aquí ideas, hoteles, tiendas o restaurantes antes de
+            asignarlos a un día.
+          </div>
+        </div>
+      ) : (
         <>
-          <p className="text-xs text-gray-600 mb-2">
-            Haz click en un lugar para editarlo en el panel izquierdo. Cuando
-            tengas claro el día, usa “Enviar al día actual”. El día actual se
-            selecciona en la pestaña <strong>Itinerario</strong>.
+          <p className="text-xs text-gray-600">
+            Click para editar. Usa el botón de cada tarjeta para moverlo al día
+            actual del itinerario.
           </p>
 
-          <ul className="list">
+          <ul className="list scroll-list my-places-list">
             {pool.map((p) => (
-              <li key={p.id} className="item">
-                <div className="flex justify-between gap-2">
-                  {/* Card clickable -> abre edición a la izquierda */}
-                  <div
-                    style={{ cursor: "pointer", flex: 1 }}
-                    onClick={() => {
-                      setSelected(p.id);
-                      setShowMap(false);
-                    }}
-                  >
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium">{p.name}</span>
-                      <CategoryBadge category={p.category || "otro"} />
-                    </div>
-                    <div className="text-xs">
-                      {p.notes ? p.notes.slice(0, 60) : "Sin notas"}
-                    </div>
+              <li key={p.id} className="my-place-card">
+                <button
+                  className="my-place-main"
+                  onClick={() => {
+                    setSelected(p.id);
+                    setShowMap(false);
+                  }}
+                >
+                  <div className="my-place-title-row">
+                    <span className="my-place-title">{p.name}</span>
+                    <CategoryBadge category={p.category || "otro"} />
                   </div>
+                  <div className="my-place-meta">
+                    {p.notes ? p.notes.slice(0, 90) : "Sin notas"}
+                  </div>
+                </button>
 
-                  {/* Botón para mandarlo al día actual */}
-                  <div className="flex flex-col items-end gap-1">
-                    <button
-                      className="btn-outline text-xs"
-                      onClick={() => handleAssignToCurrentDay(p.id)}
-                    >
-                      Enviar al día actual
-                    </button>
-                    {days.length > 0 && (
-                      <span className="text-[10px] text-gray-600">
-                        Día actual: {selectedDate}
-                      </span>
-                    )}
-                  </div>
+                <div className="my-place-actions">
+                  {days.length > 0 && (
+                    <span className="my-place-date">Día actual: {selectedDate}</span>
+                  )}
+                  <button
+                    className="btn-outline text-xs"
+                    onClick={() => handleAssignToCurrentDay(p.id)}
+                  >
+                    Enviar al día
+                  </button>
                 </div>
               </li>
             ))}

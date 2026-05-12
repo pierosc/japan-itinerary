@@ -5,11 +5,22 @@ function fmt(n) {
 }
 
 export default function BudgetSummary() {
-  const { days, selectedDate, totalJPYForDate, totalJPYAll, currency } =
-    useItineraryStore();
+  const {
+    days,
+    selectedDate,
+    totalJPYForDate,
+    totalJPYAll,
+    totalExpenseJPYForDate,
+    totalExpenseJPYAll,
+    currency,
+  } = useItineraryStore();
 
-  const dayJPY = totalJPYForDate(selectedDate);
-  const tripJPY = totalJPYAll();
+  const dayPlaceJPY = totalJPYForDate(selectedDate);
+  const tripPlaceJPY = totalJPYAll();
+  const dayExpenseJPY = totalExpenseJPYForDate(selectedDate);
+  const tripExpenseJPY = totalExpenseJPYAll();
+  const dayJPY = dayPlaceJPY + dayExpenseJPY;
+  const tripJPY = tripPlaceJPY + tripExpenseJPY;
   const dayFX = dayJPY * (currency.ratePerJPY || 0);
   const tripFX = tripJPY * (currency.ratePerJPY || 0);
 

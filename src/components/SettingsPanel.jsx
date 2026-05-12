@@ -1,7 +1,6 @@
 // src/components/SettingsPanel.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useItineraryStore } from "../hooks/useItineraryStore";
-import { useUser } from "@clerk/clerk-react";
 import { supabase } from "./lib/supabaseClient";
 
 /**
@@ -14,10 +13,11 @@ import { supabase } from "./lib/supabaseClient";
  * - Botón "Perfil público" (profiles.is_public)
  * - Toggle "Auto-guardado" (ui.autoSaveEnabled + ui.autoSaveIntervalMin)
  */
-export default function SettingsPanel({ trip, onUpdateTripMeta }) {
+export default function SettingsPanel({ trip, currentUser, onUpdateTripMeta }) {
   const ui = useItineraryStore((s) => s.ui);
   const setTheme = useItineraryStore((s) => s.setTheme);
   const setStorageMode = useItineraryStore((s) => s.setStorageMode);
+  const setMapTilerKey = useItineraryStore((s) => s.setMapTilerKey);
 
   // ✅ Ya existen en tu store
   const autoSaveEnabled = useItineraryStore((s) => s.ui.autoSaveEnabled);
@@ -27,7 +27,8 @@ export default function SettingsPanel({ trip, onUpdateTripMeta }) {
   const setAutoSaveEnabled = useItineraryStore((s) => s.setAutoSaveEnabled);
   const setAutoSaveInterval = useItineraryStore((s) => s.setAutoSaveInterval);
 
-  const { isSignedIn, user } = useUser();
+  const user = currentUser;
+  const isSignedIn = Boolean(user?.id);
 
   const [publicLoading, setPublicLoading] = useState(false);
   const [publicError, setPublicError] = useState(null);
@@ -282,6 +283,22 @@ export default function SettingsPanel({ trip, onUpdateTripMeta }) {
             Tema oscuro
           </button>
         </div>
+      </section>
+
+      <section className="card" style={{ padding: 12 }}>
+        <h3 className="font-semibold text-xs mb-2">Mapa</h3>
+        <label className="text-xs">
+          MapTiler key para etiquetas en español
+          <input
+            className="input mt-1"
+            value={ui.mapTilerKey || ""}
+            onChange={(e) => setMapTilerKey(e.target.value)}
+            placeholder="Pega tu key de MapTiler"
+          />
+        </label>
+        <p className="text-xs text-gray-600 mt-1">
+          Después selecciona “MapTiler calles ES” en el mapa base.
+        </p>
       </section>
 
       {/* MODO DE GUARDADO */}

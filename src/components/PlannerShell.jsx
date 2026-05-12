@@ -6,6 +6,8 @@ import { useItineraryStore } from "../hooks/useItineraryStore";
 
 export default function PlannerShell({
   trip,
+  currentUser,
+  hasClerk,
   onBack,
   onSave,
   saveState,
@@ -25,25 +27,31 @@ export default function PlannerShell({
       : "Modo local";
 
   return (
-    <div className="h-full flex flex-col gap-3">
+    <div className="planner-shell h-full flex flex-col gap-3">
       <PlannerAppBar
         trip={trip}
+        currentUser={currentUser}
+        hasClerk={hasClerk}
         onBack={onBack}
         onSaveNow={onSave}
         saveState={saveState || "idle"}
         saveMessage={saveMessage || defaultStatus}
       />
 
-      <div className="h-full grid grid-cols-2 gap-3">
-        <div className="panel">
+      <div className="planner-main h-full">
+        <div className="panel map-panel-wrap">
           <div className="h-full">
             <MapPanel />
           </div>
         </div>
 
-        <div className="panel overflow-auto">
-          <div className="h-full flex flex-col gap-3 p-3">
-            <Sidebar trip={trip} onUpdateTripMeta={onUpdateTripMeta} />
+        <div className="panel sidebar-panel overflow-hidden">
+          <div className="h-full flex flex-col min-h-0">
+            <Sidebar
+              trip={trip}
+              currentUser={currentUser}
+              onUpdateTripMeta={onUpdateTripMeta}
+            />
           </div>
         </div>
       </div>

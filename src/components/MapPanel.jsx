@@ -4,14 +4,15 @@ import {
   TileLayer,
   Marker,
   Popup,
+  useMap,
   useMapEvents,
   Polyline,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useItineraryStore } from "../hooks/useItineraryStore";
 import { JAPAN_BOUNDS } from "../utils/geo";
-import { useMemo, useRef, useState } from "react";
 import SelectedPlaceView from "./SelectedPlaceView";
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -22,30 +23,62 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-// Basemaps
+const DEFAULT_ICON = new L.Icon({
+  iconRetinaUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
+const SELECTED_ICON = new L.Icon({
+  iconRetinaUrl:
+    "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+  iconUrl:
+    "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
 const BASEMAPS = (key) => ({
-  osm: {
-    name: "OSM estándar",
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attr: "© OpenStreetMap contributors",
-  },
   "carto-en": {
-    name: "Carto Positron",
+    name: "Carto Positron (recomendado)",
     url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
     attr: "© CARTO, OSM",
   },
-  "carto-dark-en": {
-    name: "Carto DarkMatter",
-    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-    attr: "© CARTO, OSM",
+  osm: {
+    name: "OpenStreetMap",
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attr: "© OpenStreetMap contributors",
+  },
+  "esri-worldstreet": {
+    name: "Esri WorldStreet",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    attr: "Tiles © Esri",
   },
   "esri-worldgray": {
     name: "Esri WorldGray",
     url: "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
     attr: "Tiles © Esri",
   },
+  opentopo: {
+    name: "OpenTopoMap",
+    url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+    attr: "© OpenTopoMap, OSM",
+  },
+  "carto-dark-en": {
+    name: "Carto DarkMatter",
+    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+    attr: "© CARTO, OSM",
+  },
   "maptiler-es": {
-    name: "MapTiler (ES)*",
+    name: "MapTiler calles ES*",
     url: key
       ? `https://api.maptiler.com/maps/streets/{z}/{x}/{y}.png?key=${key}&lang=es`
       : "",
@@ -53,25 +86,49 @@ const BASEMAPS = (key) => ({
   },
 });
 
-// === Click para añadir punto (ignora clicks sobre UI) ===
-function ClickToAdd() {
+function ClickToAdd({ enabled }) {
   const addPlace = useItineraryStore((s) => s.addPlace);
+  const setSelected = useItineraryStore((s) => s.setSelected);
 
   useMapEvents({
     click(e) {
+      if (!enabled) return;
       const target = e.originalEvent?.target;
-      // si el click viene de la capa de controles, no creamos punto
       if (target && target.closest?.(".map-ui-overlay")) return;
 
-      addPlace({
+      const id = addPlace({
         name: "Nuevo punto",
         category: "otro",
         lat: e.latlng.lat,
         lng: e.latlng.lng,
         notes: "",
       });
+      if (id) setSelected(id);
     },
   });
+
+  return null;
+}
+
+function FitToDayPlaces({ places, fallbackBounds }) {
+  const map = useMap();
+  const key = places.map((p) => `${p.id}:${p.lat}:${p.lng}`).join("|");
+
+  useEffect(() => {
+    window.requestAnimationFrame(() => {
+      if (!places.length) {
+        map.fitBounds(fallbackBounds, { padding: [24, 24], maxZoom: 6 });
+        return;
+      }
+
+      const pointBounds = L.latLngBounds(places.map((p) => [p.lat, p.lng]));
+      if (places.length === 1) {
+        map.setView(pointBounds.getCenter(), 14);
+      } else {
+        map.fitBounds(pointBounds, { padding: [52, 52], maxZoom: 15 });
+      }
+    });
+  }, [key, map, fallbackBounds, places]);
 
   return null;
 }
@@ -87,6 +144,8 @@ export default function MapPanel() {
     setBasemap,
     toggleRoute,
     setShowMap,
+    toggleClickToAdd,
+    setSidebarTab,
   } = useItineraryStore();
 
   const places = placesBySelectedDate();
@@ -100,12 +159,10 @@ export default function MapPanel() {
     []
   );
   const basemaps = BASEMAPS(ui.mapTilerKey);
-  const bm = basemaps[ui.basemap] || basemaps.osm;
+  const bm = basemaps[ui.basemap] || basemaps["carto-en"];
 
-  // Si ocultaste el mapa y hay seleccionado, mostramos ficha
   if (!ui.showMap && selectedId) return <SelectedPlaceView />;
 
-  // === Buscar lugar tipo "Google Maps" con Nominatim ===
   async function handleSearch(e) {
     e.preventDefault();
     if (!searchQuery.trim() || !mapRef.current) return;
@@ -121,7 +178,7 @@ export default function MapPanel() {
       const data = await resp.json();
 
       if (!Array.isArray(data) || !data.length) {
-        alert("No se encontraron resultados para esa búsqueda.");
+        alert("No se encontraron resultados para esa busqueda.");
         return;
       }
 
@@ -129,19 +186,19 @@ export default function MapPanel() {
       const lat = parseFloat(best.lat);
       const lng = parseFloat(best.lon);
 
-      // centrar mapa
       mapRef.current.setView([lat, lng], 15);
 
-      // crear punto en el resultado
       const name = best.display_name?.split(",")[0] || searchQuery.trim();
-      const { addPlace } = useItineraryStore.getState();
-      addPlace({
+      const { addPlace, setSelected: selectNewPlace } =
+        useItineraryStore.getState();
+      const id = addPlace({
         name,
         category: "otro",
         lat,
         lng,
-        notes: `Resultado de búsqueda: ${best.display_name}`,
+        notes: `Resultado de busqueda: ${best.display_name}`,
       });
+      if (id) selectNewPlace(id);
     } catch (err) {
       console.error("Error buscando lugar:", err);
       alert("Error al buscar el lugar. Intenta de nuevo.");
@@ -150,23 +207,20 @@ export default function MapPanel() {
     }
   }
 
+  const handleMarkerClick = (id) => {
+    setSelected(id);
+    setShowMap(true);
+    setSidebarTab("itinerary");
+  };
+
   return (
     <div className="h-full w-full" style={{ position: "relative" }}>
-      {/* CONTROLES SUPERIORES */}
       <div
-        className="card map-ui-overlay"
-        style={{
-          position: "absolute",
-          left: 12,
-          top: 12,
-          zIndex: 1000,
-          maxWidth: 360,
-        }}
+        className="map-ui-overlay"
       >
-        {/* Buscador de lugares */}
         <form
+          className="map-search"
           onSubmit={handleSearch}
-          style={{ display: "flex", gap: 8, marginBottom: 8 }}
         >
           <input
             className="input"
@@ -179,10 +233,9 @@ export default function MapPanel() {
           </button>
         </form>
 
-        {/* Basemap + botones */}
-        <div className="grid" style={{ gridTemplateColumns: "1fr", gap: 8 }}>
-          <label className="text-xs">
-            Mapa base
+        <div className="map-controls">
+          <label className="map-basemap">
+            <span>Mapa base</span>
             <select
               className="input"
               value={ui.basemap}
@@ -202,40 +255,50 @@ export default function MapPanel() {
 
           {ui.basemap === "maptiler-es" && !ui.mapTilerKey && (
             <div className="text-xs">
-              Para español, guarda en Settings tu clave de MapTiler
-              (ui.mapTilerKey).
+              Para etiquetas en espanol, guarda tu clave de MapTiler en
+              Configuracion.
             </div>
           )}
 
-          <button className="btn-outline" onClick={toggleRoute}>
-            {ui.routeVisible ? "Ocultar rutas" : "Mostrar rutas"}
-          </button>
-          <button className="btn-outline" onClick={() => setShowMap(false)}>
-            Ver ficha seleccionada
-          </button>
+          <div className="map-actions">
+            <button className="btn-outline" onClick={toggleRoute}>
+              {ui.routeVisible ? "Ocultar rutas" : "Mostrar rutas"}
+            </button>
+            <button
+              className={
+                "btn-outline " + (ui.clickToAddEnabled ? "btn-active" : "")
+              }
+              onClick={toggleClickToAdd}
+              title="Cuando esta activo, un click en el mapa crea un punto."
+            >
+              {ui.clickToAddEnabled ? "Click agrega punto" : "Click no agrega"}
+            </button>
+            <button className="btn-outline" onClick={() => setShowMap(false)}>
+              Ver ficha seleccionada
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* MAPA */}
       <MapContainer
         bounds={bounds}
         className="h-full w-full rounded-lg"
         scrollWheelZoom
-        whenCreated={(map) => {
-          mapRef.current = map;
-        }}
+        ref={mapRef}
       >
         {bm.url && <TileLayer attribution={bm.attr} url={bm.url} />}
 
-        <ClickToAdd />
+        <FitToDayPlaces places={places} fallbackBounds={bounds} />
+        <ClickToAdd enabled={Boolean(ui.clickToAddEnabled)} />
 
-        {/* Marcadores */}
         {places.map((p) => (
           <Marker
             key={p.id}
             position={[p.lat, p.lng]}
+            icon={selectedId === p.id ? SELECTED_ICON : DEFAULT_ICON}
+            zIndexOffset={selectedId === p.id ? 1000 : 0}
             eventHandlers={{
-              click: () => setSelected(p.id),
+              click: () => handleMarkerClick(p.id),
               dragend: (ev) => {
                 const { lat, lng } = ev.target.getLatLng();
                 updatePlace(p.id, { lat, lng });
@@ -260,7 +323,6 @@ export default function MapPanel() {
           </Marker>
         ))}
 
-        {/* Conectores virtuales */}
         {ui.routeVisible &&
           places.map((p, i) => {
             const next = places[i + 1];
@@ -287,7 +349,6 @@ export default function MapPanel() {
             );
           })}
 
-        {/* Rutas reales */}
         {ui.routeVisible &&
           routes.map((r) => {
             const from = places.find((p) => p.id === r.fromId);

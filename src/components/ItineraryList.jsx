@@ -29,15 +29,17 @@ export default function ItineraryList() {
     speedsKmh,
     selectedDate,
     reorderPlacesForDate,
-    addRouteBetween,
     routesBySelectedDate,
     removeRoute,
     updateRoute,
     setShowMap,
+    ui,
 
     // ✅ My places
     unassignedPlaces,
     assignPlaceToDay,
+    updatePlace,
+    places,
     unassignPlace, // ✅ NUEVO
   } = useItineraryStore();
 
@@ -46,7 +48,7 @@ export default function ItineraryList() {
   // ✅ NUEVO: selector simple (1 lugar suelto)
   const [selectedLooseId, setSelectedLooseId] = useState("");
 
-  const places = placesBySelectedDate();
+  const placesForDay = placesBySelectedDate();
   const routes = routesBySelectedDate();
   const pool = unassignedPlaces(); // date=null
 
@@ -60,6 +62,7 @@ export default function ItineraryList() {
     if (!selectedLooseId) return;
 
     assignPlaceToDay(selectedLooseId, selectedDate);
+    updatePlace(selectedLooseId, { previewDate: null });
 
     // opcional UX: abrir panel de edición
     setSelected(selectedLooseId);
@@ -68,12 +71,26 @@ export default function ItineraryList() {
     setSelectedLooseId("");
   };
 
+  const handleLoosePreview = (id) => {
+    setSelectedLooseId(id);
+    if (!id) return;
+    places
+      .filter((p) => p.previewDate === selectedDate && p.id !== id)
+      .forEach((p) => updatePlace(p.id, { previewDate: null }));
+    const place = pool.find((p) => p.id === id);
+    if (place && !place.date) {
+      updatePlace(id, { previewDate: selectedDate });
+    }
+    setSelected(id);
+    setShowMap(true);
+  };
+
   // bloques: ITEM → RUTA → ITEM …
   const blocks = useMemo(() => {
     const out = [];
-    for (let i = 0; i < places.length; i++) {
-      const cur = places[i];
-      const next = places[i + 1];
+    for (let i = 0; i < placesForDay.length; i++) {
+      const cur = placesForDay[i];
+      const next = placesForDay[i + 1];
       out.push({ kind: "place", place: cur });
       if (next) {
         const r =
@@ -83,14 +100,14 @@ export default function ItineraryList() {
       }
     }
     return out;
-  }, [places, routes]);
+  }, [placesForDay, routes]);
 
   // DnD solo items
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor)
   );
-  const idsForDnd = places.map((p) => p.id);
+  const idsForDnd = placesForDay.map((p) => p.id);
 
   function onDragEnd(e) {
     const { active, over } = e;
@@ -112,8 +129,8 @@ export default function ItineraryList() {
   }
 
   async function createRouteBetween(a, b, mode = "walk") {
-    const from = places.find((p) => p.id === a);
-    const to = places.find((p) => p.id === b);
+    const from = placesForDay.find((p) => p.id === a);
+    const to = placesForDay.find((p) => p.id === b);
     if (!from || !to) return;
 
     let geojson = null;
@@ -126,7 +143,9 @@ export default function ItineraryList() {
         const data = await resp.json();
         const coords = data.routes?.[0]?.geometry?.coordinates || [];
         geojson = coords.map(([lng, lat]) => [lat, lng]);
-      } catch {}
+      } catch (err) {
+        console.error("Error creando ruta OSRM", err);
+      }
     }
 
     const { addRouteBetween } = useItineraryStore.getState();
@@ -307,16 +326,8 @@ export default function ItineraryList() {
   }
 
   return (
-    <>
-      {/* Header */}
-      <div
-        className="flex"
-        style={{
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 8,
-        }}
-      >
+    <div className="list-panel">
+      <div className="section-heading">
         <h2 className="font-semibold">Itinerario</h2>
         <button
           className="btn"
@@ -334,23 +345,14 @@ export default function ItineraryList() {
         </button>
       </div>
 
-      {/* ✅ NUEVO: Selector simple (en vez del panel gigante) */}
-      <div className="card" style={{ padding: 10, marginBottom: 10 }}>
-        <div className="text-xs text-gray-600" style={{ marginBottom: 6 }}>
-          Agregar lugar suelto (My places) al día{" "}
-          <strong>{selectedDate}</strong>
-          {" · "}
-          Sueltos: <strong>{pool.length}</strong>
-        </div>
-
-        <div className="flex" style={{ gap: 8, alignItems: "center" }}>
+      <div className="inline-add-panel">
+        <div className="inline-add-row">
           <select
             className="input"
             value={selectedLooseId}
-            onChange={(e) => setSelectedLooseId(e.target.value)}
-            style={{ flex: "1 1 auto" }}
+            onChange={(e) => handleLoosePreview(e.target.value)}
           >
-            <option value="">Selecciona un lugar…</option>
+            <option value="">Selecciona un lugar de My Places</option>
             {pool.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -362,7 +364,6 @@ export default function ItineraryList() {
             className="btn-outline text-xs"
             disabled={!canAddLoose}
             onClick={handleAddLooseToDay}
-            style={{ whiteSpace: "nowrap" }}
           >
             Agregar al día
           </button>
@@ -379,7 +380,7 @@ export default function ItineraryList() {
           items={idsForDnd}
           strategy={verticalListSortingStrategy}
         >
-          <ol className="list">
+          <ol className="list scroll-list">
             {blocks.map((b) => {
               if (b.kind === "place") {
                 const p = b.place;
@@ -396,23 +397,17 @@ export default function ItineraryList() {
                           }`}
                           onClick={() => {
                             setSelected(p.id);
+                            setShowMap(Boolean(ui.showMap));
+                          }}
+                          onDoubleClick={() => {
+                            setSelected(p.id);
                             setShowMap(false);
                           }}
-                          style={{
-                            display: "grid",
-                            gridTemplateColumns: "1fr auto auto",
-                            gap: 8,
-                            cursor: "pointer",
-                            alignItems: "center",
-                          }}
+                          style={{ cursor: "pointer" }}
                         >
-                          <div>
+                          <div className="itinerary-item-main">
                             <div
-                              className="flex"
-                              style={{
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                              }}
+                              className="itinerary-item-title"
                             >
                               <div className="font-medium">
                                 {numFor(p.id)}. {p.name}
@@ -439,38 +434,27 @@ export default function ItineraryList() {
                             )}
                           </div>
 
-                          {/* ✅ NUEVO: Botón para mandar a My places */}
-                          <button
-                            className="btn-outline text-xs"
-                            title="Mover a My places"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              unassignPlace(p.id);
-                            }}
-                            style={{ whiteSpace: "nowrap" }}
-                          >
-                            ↩︎ A My places
-                          </button>
+                          <div className="itinerary-item-actions">
+                            <button
+                              className="btn-outline text-xs"
+                              title="Mover a My places"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                unassignPlace(p.id);
+                              }}
+                            >
+                              ↩ A My places
+                            </button>
 
-                          {/* Handle de arrastre (tu mismo handle) */}
-                          <div
-                            {...handleProps}
-                            role="button"
-                            aria-label="arrastrar"
-                            className="itinerary-handle"
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              width: 30,
-                              borderRadius: 8,
-                              cursor: "grab",
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <span style={{ letterSpacing: 2, opacity: 0.7 }}>
-                              ⋮⋮
-                            </span>
+                            <div
+                              {...handleProps}
+                              role="button"
+                              aria-label="arrastrar"
+                              className="itinerary-handle"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <span>⋮⋮</span>
+                            </div>
                           </div>
                         </div>
                       </li>
@@ -499,6 +483,6 @@ export default function ItineraryList() {
           </ol>
         </SortableContext>
       </DndContext>
-    </>
+    </div>
   );
 }

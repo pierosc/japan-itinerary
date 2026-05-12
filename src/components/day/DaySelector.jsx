@@ -1,5 +1,62 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useItineraryStore } from "../../hooks/useItineraryStore";
+
+function CalendarDialog({
+  open,
+  title,
+  value,
+  confirmLabel,
+  onClose,
+  onConfirm,
+}) {
+  const [date, setDate] = useState(value || "");
+
+  useEffect(() => {
+    setDate(value || "");
+  }, [value, open]);
+
+  if (!open) return null;
+
+  return (
+    <div className="dialog-backdrop" role="presentation" onClick={onClose}>
+      <div
+        className="dialog-card calendar-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="section-heading">
+          <h2 className="font-semibold">{title}</h2>
+          <button className="icon-button" onClick={onClose} title="Cerrar">
+            ×
+          </button>
+        </div>
+
+        <input
+          className="input calendar-input"
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          autoFocus
+        />
+
+        <div className="dialog-actions">
+          <button className="btn-outline" onClick={onClose}>
+            Cancelar
+          </button>
+          <button
+            className="btn"
+            disabled={!date}
+            onClick={() => onConfirm(date)}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function DaySelector() {
   const {
@@ -8,35 +65,57 @@ export default function DaySelector() {
     setSelectedDate,
     addDay,
     removeDay,
+    renameDay,
     totalJPYForDate,
+    totalExpenseJPYForDate,
   } = useItineraryStore();
-  const [newDate, setNewDate] = useState("");
+  const [dialog, setDialog] = useState(null);
+
+  const selectedTotal =
+    totalJPYForDate(selectedDate) + totalExpenseJPYForDate(selectedDate);
+
+  const closeDialog = () => setDialog(null);
+
+  const handleCreateDay = (date) => {
+    addDay(date);
+    closeDialog();
+  };
+
+  const handleRenameDay = (date) => {
+    renameDay(selectedDate, date);
+    closeDialog();
+  };
+
+  const handleRemoveDay = () => {
+    if (days.length <= 1) return;
+    if (
+      confirm(
+        "¿Eliminar este día? Sus lugares se moverán a My Places y sus rutas del día se quitarán."
+      )
+    ) {
+      removeDay(selectedDate);
+    }
+  };
 
   return (
-    <>
-      <h2 className="font-semibold mb-2">Días del viaje</h2>
+    <div className="day-selector">
+      <div className="section-heading">
+        <div>
+          <h2 className="font-semibold">Días del viaje</h2>
+          <div className="text-xs">
+            {days.length} día/s
+            {selectedTotal ? ` · ¥${selectedTotal}` : ""}
+          </div>
+        </div>
 
-      {/* 1 sola línea, sin wrap; scroll horizontal si no alcanza */}
-      <div
-        className="flex"
-        style={{
-          gap: 8,
-          alignItems: "center",
-          flexWrap: "nowrap",
-          overflowX: "auto",
-          paddingBottom: 2,
-        }}
-      >
-        {/* SELECT de días */}
         <select
-          className="input"
+          className="input day-select"
           value={selectedDate}
           onChange={(e) => setSelectedDate(e.target.value)}
           title="Selecciona el día del itinerario"
-          style={{ flex: "1 1 auto", minWidth: 260 }}
         >
           {days.map((d) => {
-            const total = totalJPYForDate(d);
+            const total = totalJPYForDate(d) + totalExpenseJPYForDate(d);
             return (
               <option key={d} value={d}>
                 {`${d}${total ? ` · ¥${total}` : ""}`}
@@ -45,43 +124,52 @@ export default function DaySelector() {
           })}
         </select>
 
-        {/* Añadir día (input + botón) */}
-        <input
-          type="date"
-          className="input"
-          value={newDate}
-          onChange={(e) => setNewDate(e.target.value)}
-          style={{ width: 200 }}
-        />
-
-        <button
-          className="btn"
-          onClick={() => {
-            if (!newDate) return;
-            addDay(newDate);
-            setNewDate("");
-          }}
-          title="Añadir día"
-          style={{ whiteSpace: "nowrap" }}
-        >
-          Añadir día
-        </button>
-
-        {days.length > 1 && (
+        <div className="day-icon-actions">
           <button
-            className="btn-outline"
-            onClick={() => {
-              if (confirm("¿Eliminar el día seleccionado y sus puntos?")) {
-                removeDay(selectedDate);
-              }
-            }}
-            title="Eliminar día seleccionado"
-            style={{ whiteSpace: "nowrap" }}
+            className="icon-button"
+            onClick={() => setDialog("create")}
+            title="Añadir día"
+            aria-label="Añadir día"
           >
-            Eliminar día
+            +
           </button>
-        )}
+          <button
+            className="icon-button"
+            onClick={() => setDialog("rename")}
+            title="Cambiar fecha"
+            aria-label="Cambiar fecha"
+          >
+            ◷
+          </button>
+          <button
+            className="icon-button icon-button-danger"
+            disabled={days.length <= 1}
+            onClick={handleRemoveDay}
+            title="Eliminar día"
+            aria-label="Eliminar día"
+          >
+            ×
+          </button>
+        </div>
       </div>
-    </>
+
+      <CalendarDialog
+        open={dialog === "create"}
+        title="Añadir día"
+        value=""
+        confirmLabel="Crear día"
+        onClose={closeDialog}
+        onConfirm={handleCreateDay}
+      />
+
+      <CalendarDialog
+        open={dialog === "rename"}
+        title="Cambiar fecha"
+        value={selectedDate}
+        confirmLabel="Actualizar día"
+        onClose={closeDialog}
+        onConfirm={handleRenameDay}
+      />
+    </div>
   );
 }

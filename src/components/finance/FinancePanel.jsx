@@ -2,8 +2,9 @@
 import { useItineraryStore } from "../../hooks/useItineraryStore";
 import BudgetSummary from "./BudgetSummary";
 import CurrencyConverter from "./CurrencyConverter";
+import ExpenseLedger from "./ExpenseLedger";
 
-export default function FinancePanel() {
+export default function FinancePanel({ trip, currentUser }) {
   const financeOpen = useItineraryStore((s) => s.ui.financeOpen);
   const toggleFinance = useItineraryStore((s) => s.toggleFinance);
 
@@ -22,6 +23,7 @@ export default function FinancePanel() {
       {financeOpen && (
         <div className="mt-2" style={{ display: "grid", gap: 12 }}>
           <BudgetSummary />
+          <ExpenseLedger trip={trip} currentUser={currentUser} />
           <CurrencyConverter />
         </div>
       )}

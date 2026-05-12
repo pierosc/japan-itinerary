@@ -1,6 +1,6 @@
 // src/App.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useUser, SignInButton } from "@clerk/clerk-react";
+import { SignInButton } from "@clerk/clerk-react";
 import { createClient } from "@supabase/supabase-js";
 import PlannerShell from "./components/PlannerShell";
 import LandingPage from "./components/LandingPage";
@@ -46,6 +46,8 @@ function loadTripLocal(tripId) {
 async function saveTripOnline({
   tripId,
   userId,
+  ownerUserId,
+  sharedWithUserIds,
   data,
   title,
   destination,
@@ -58,7 +60,8 @@ async function saveTripOnline({
   try {
     const payload = {
       trip_id: tripId,
-      user_id: userId,
+      user_id: ownerUserId || userId,
+      shared_with_user_ids: sharedWithUserIds || [],
       data,
       title: title || "Sin título",
       destination: destination || "Japan",
@@ -112,7 +115,7 @@ async function fetchTripsOnline(userId) {
 }
 
 /* ========= Entry ========= */
-function EntryScreen({ onGuest }) {
+function EntryScreen({ onGuest, hasClerk }) {
   return (
     <div className="entry-root">
       <div className="entry-card">
@@ -122,9 +125,15 @@ function EntryScreen({ onGuest }) {
         </p>
 
         <div className="entry-actions">
-          <SignInButton mode="modal">
-            <button className="btn w-full">Entrar con mi cuenta</button>
-          </SignInButton>
+          {hasClerk ? (
+            <SignInButton mode="modal">
+              <button className="btn w-full">Entrar con mi cuenta</button>
+            </SignInButton>
+          ) : (
+            <button className="btn w-full" type="button" disabled>
+              Login no configurado
+            </button>
+          )}
           <button className="btn-outline w-full" onClick={onGuest}>
             Continuar como invitado
           </button>
@@ -139,8 +148,8 @@ function EntryScreen({ onGuest }) {
   );
 }
 
-export default function App() {
-  const { isSignedIn, isLoaded, user } = useUser();
+export default function App({ auth }) {
+  const { isSignedIn, isLoaded, user, hasClerk } = auth;
 
   // ✅ hooks del store SIEMPRE arriba
   const theme = useItineraryStore((s) => s.ui.theme);
@@ -332,6 +341,8 @@ export default function App() {
           const result = await saveTripOnline({
             tripId: activeTrip.id,
             userId: user.id,
+            ownerUserId: activeTrip.ownerUserId || user.id,
+            sharedWithUserIds: activeTrip.sharedWithUserIds || [],
             data,
             title: activeTrip.title,
             destination: activeTrip.destination,
@@ -389,10 +400,12 @@ export default function App() {
           </div>
         </div>
       ) : !canEnter ? (
-        <EntryScreen onGuest={() => setGuest(true)} />
+        <EntryScreen onGuest={() => setGuest(true)} hasClerk={hasClerk} />
       ) : activeTrip ? (
         <PlannerShell
           trip={activeTrip}
+          currentUser={user}
+          hasClerk={hasClerk}
           onBack={handleBackToTrips}
           onSave={handleSave}
           // (si luego separas AppBar, puedes pasar saveState/saveMessage también)

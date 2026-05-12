@@ -9,8 +9,16 @@ import UsersPanel from "./UsersPanel";
 import PackingListPanel from "./PackingListPanel";
 import { useItineraryStore } from "../hooks/useItineraryStore";
 
-export default function Sidebar({ trip, onUpdateTripMeta }) {
-  const selectedId = useItineraryStore((s) => s.selectedId);
+const NAV_ITEMS = [
+  { id: "itinerary", label: "Itinerario", short: "Plan", icon: "⌖" },
+  { id: "myplaces", label: "My places", short: "Places", icon: "☆" },
+  { id: "finance", label: "Gastos y finanzas", short: "Gastos", icon: "¥" },
+  { id: "packing", label: "Packing list", short: "Packing", icon: "□" },
+  { id: "users", label: "Users", short: "Users", icon: "@" },
+  { id: "settings", label: "Configuración", short: "Config", icon: "⚙" },
+];
+
+export default function Sidebar({ trip, currentUser, onUpdateTripMeta }) {
   const ui = useItineraryStore((s) => s.ui);
   const setSidebarTab = useItineraryStore((s) => s.setSidebarTab);
   const storageMode = ui.storageMode || "online";
@@ -18,103 +26,98 @@ export default function Sidebar({ trip, onUpdateTripMeta }) {
   // 👇 contador de "My places" (lugares sin date)
   const unassignedCount = useItineraryStore((s) => s.unassignedPlaces().length);
 
-  const tabClass = (tab) =>
-    "btn-outline flex-1 text-xs " + (ui.sidebarTab === tab ? "btn-active" : "");
-
   return (
-    <div className="h-full w-full flex flex-col gap-3">
+    <div className="sidebar-shell h-full w-full flex flex-col min-h-0">
       {storageMode === "local" && (
         <div className="toolbar card">
           <ImportExport />
         </div>
       )}
 
-      <div className="card">
-        <div className="flex gap-2 flex-wrap">
-          <button
-            className={tabClass("itinerary")}
-            onClick={() => setSidebarTab("itinerary")}
-          >
-            Itinerario
-          </button>
+      <div className="sidebar-nav">
+        <select
+          className="input sidebar-nav-select"
+          value={ui.sidebarTab}
+          onChange={(e) => setSidebarTab(e.target.value)}
+          aria-label="Cambiar sección"
+        >
+          {NAV_ITEMS.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.id === "myplaces" && unassignedCount > 0
+                ? `${item.label} (${unassignedCount})`
+                : item.label}
+            </option>
+          ))}
+        </select>
 
-          <button
-            className={tabClass("myplaces")}
-            onClick={() => setSidebarTab("myplaces")}
-          >
-            My places {unassignedCount > 0 ? `(${unassignedCount})` : ""}
-          </button>
-
-          <button
-            className={tabClass("finance")}
-            onClick={() => setSidebarTab("finance")}
-          >
-            Gastos y finanzas
-          </button>
-
-          <button
-            className={tabClass("packing")}
-            onClick={() => setSidebarTab("packing")}
-          >
-            Packing list
-          </button>
-
-          <button
-            className={tabClass("users")}
-            onClick={() => setSidebarTab("users")}
-          >
-            Users
-          </button>
-
-          <button
-            className={tabClass("settings")}
-            onClick={() => setSidebarTab("settings")}
-          >
-            Configuración
-          </button>
+        <div className="sidebar-tabs" role="tablist" aria-label="Secciones">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              className={
+                "sidebar-tab " +
+                (ui.sidebarTab === item.id ? "sidebar-tab--active" : "")
+              }
+              onClick={() => setSidebarTab(item.id)}
+              role="tab"
+              aria-selected={ui.sidebarTab === item.id}
+            >
+              <span className="sidebar-tab-icon" aria-hidden="true">
+                {item.icon}
+              </span>
+              <span>{item.short}</span>
+              {item.id === "myplaces" && unassignedCount > 0 && (
+                <span className="sidebar-tab-count">{unassignedCount}</span>
+              )}
+            </button>
+          ))}
         </div>
       </div>
 
       {ui.sidebarTab === "itinerary" && (
-        <>
-          <div className="card">
+        <div className="sidebar-pane">
+          <section className="workspace-section">
             <DaySelector />
-          </div>
-          <div className="card">
+          </section>
+          <section className="workspace-section sidebar-list-card">
             <ItineraryList />
-          </div>
-        </>
+          </section>
+        </div>
       )}
 
       {ui.sidebarTab === "myplaces" && (
-        <div className="card">
+        <section className="workspace-section sidebar-list-card">
           <MyPlacesPanel />
-        </div>
+        </section>
       )}
 
       {ui.sidebarTab === "finance" && (
-        <div className="card">
-          <FinancePanel />
-        </div>
+        <section className="workspace-section sidebar-scroll-pane">
+          <FinancePanel trip={trip} currentUser={currentUser} />
+        </section>
       )}
 
       {ui.sidebarTab === "packing" && (
-        <div className="card">
+        <section className="workspace-section sidebar-list-card">
           <PackingListPanel />
-        </div>
+        </section>
       )}
 
       {ui.sidebarTab === "users" && (
-        <div className="card">
+        <section className="workspace-section sidebar-list-card">
           {/* OJO: UsersPanel ahora recibe trip (para id) */}
-          <UsersPanel trip={trip} />
-        </div>
+          <UsersPanel trip={trip} currentUser={currentUser} />
+        </section>
       )}
 
       {ui.sidebarTab === "settings" && (
-        <div className="card">
-          <SettingsPanel trip={trip} onUpdateTripMeta={onUpdateTripMeta} />
-        </div>
+        <section className="workspace-section sidebar-scroll-pane">
+          <SettingsPanel
+            trip={trip}
+            currentUser={currentUser}
+            onUpdateTripMeta={onUpdateTripMeta}
+          />
+        </section>
       )}
     </div>
   );

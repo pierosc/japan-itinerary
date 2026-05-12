@@ -17,6 +17,7 @@ export const useItineraryStore = create((set, get) => ({
   // ===== Datos base =====
   places: [],
   routes: [],
+  expenses: [],
 
   days: [D0],
   selectedDate: D0,
@@ -40,7 +41,8 @@ export const useItineraryStore = create((set, get) => ({
     showMap: true,
     financeOpen: false,
     routeVisible: true,
-    basemap: "esri-worldstreet",
+    basemap: "carto-en",
+    clickToAddEnabled: false,
     mapTilerKey: "",
     sidebarTab: "itinerary", // itinerary | myplaces | finance | settings | users | packing
     theme: "light", // light por defecto
@@ -56,6 +58,12 @@ export const useItineraryStore = create((set, get) => ({
   toggleRoute: () =>
     set((s) => ({ ui: { ...s.ui, routeVisible: !s.ui.routeVisible } })),
   setBasemap: (basemap) => set((s) => ({ ui: { ...s.ui, basemap } })),
+  setClickToAddEnabled: (enabled) =>
+    set((s) => ({ ui: { ...s.ui, clickToAddEnabled: enabled } })),
+  toggleClickToAdd: () =>
+    set((s) => ({
+      ui: { ...s.ui, clickToAddEnabled: !s.ui.clickToAddEnabled },
+    })),
   setMapTilerKey: (k) => set((s) => ({ ui: { ...s.ui, mapTilerKey: k } })),
   setSidebarTab: (tab) => set((s) => ({ ui: { ...s.ui, sidebarTab: tab } })),
   setTheme: (theme) => set((s) => ({ ui: { ...s.ui, theme } })),
@@ -89,26 +97,50 @@ export const useItineraryStore = create((set, get) => ({
   },
 
   removeDay: (date) => {
-    const { days, places, routes } = get();
+    const { days, places, routes, expenses } = get();
     const remaining = days.filter((d) => d !== date);
+    const fallbackDate = remaining.length ? remaining[0] : todayISO();
     set({
-      days: remaining.length ? remaining : [todayISO()],
-      places: places.filter((p) => p.date !== date),
+      days: remaining.length ? remaining : [fallbackDate],
+      places: places.map((p) => (p.date === date ? { ...p, date: null } : p)),
       routes: routes.filter((r) => r.date !== date),
-      selectedDate: remaining.length ? remaining[0] : todayISO(),
+      expenses: expenses.filter((e) => e.date !== date),
+      selectedDate: fallbackDate,
       selectedId: null,
     });
   },
 
+  renameDay: (fromDate, toDate) =>
+    set((s) => {
+      if (!fromDate || !toDate || fromDate === toDate) return {};
+      const days = s.days.map((d) => (d === fromDate ? toDate : d));
+      const uniqueDays = [...new Set(days)].sort();
+
+      return {
+        days: uniqueDays.length ? uniqueDays : [todayISO()],
+        selectedDate: s.selectedDate === fromDate ? toDate : s.selectedDate,
+        places: s.places.map((p) =>
+          p.date === fromDate ? { ...p, date: toDate } : p
+        ),
+        routes: s.routes.map((r) =>
+          r.date === fromDate ? { ...r, date: toDate } : r
+        ),
+        expenses: s.expenses.map((e) =>
+          e.date === fromDate ? { ...e, date: toDate } : e
+        ),
+      };
+    }),
+
   // ====== Lugares ======
   setSelected: (id) => set({ selectedId: id }),
 
-  addPlace: (place) =>
+  addPlace: (place) => {
+    const id = uuid();
     set((s) => ({
       places: [
         ...s.places,
         {
-          id: uuid(),
+          id,
           type: "place",
           date:
             place.date !== undefined && place.date !== null
@@ -118,7 +150,9 @@ export const useItineraryStore = create((set, get) => ({
           ...place,
         },
       ],
-    })),
+    }));
+    return id;
+  },
 
   updatePlace: (id, patch) =>
     set((s) => ({
@@ -207,6 +241,48 @@ export const useItineraryStore = create((set, get) => ({
   removeRoute: (id) =>
     set((s) => ({ routes: s.routes.filter((r) => r.id !== id) })),
 
+  // ====== Gastos del viaje ======
+  addExpense: (expense) =>
+    set((s) => ({
+      expenses: [
+        ...s.expenses,
+        {
+          id: uuid(),
+          type: "expense",
+          date: expense.date || s.selectedDate,
+          kind: expense.kind || "personal",
+          title: expense.title?.trim() || "Gasto",
+          amountJPY: Number(expense.amountJPY) || 0,
+          paidBy: expense.paidBy?.trim() || "Yo",
+          participants: Array.isArray(expense.participants)
+            ? expense.participants.filter(Boolean)
+            : [],
+          notes: expense.notes || "",
+        },
+      ],
+    })),
+
+  updateExpense: (id, patch) =>
+    set((s) => ({
+      expenses: s.expenses.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+    })),
+
+  removeExpense: (id) =>
+    set((s) => ({ expenses: s.expenses.filter((e) => e.id !== id) })),
+
+  expensesBySelectedDate: () => {
+    const { expenses, selectedDate } = get();
+    return expenses.filter((e) => e.date === selectedDate);
+  },
+
+  totalExpenseJPYForDate: (date) =>
+    get()
+      .expenses.filter((e) => e.date === date)
+      .reduce((acc, e) => acc + (Number(e.amountJPY) || 0), 0),
+
+  totalExpenseJPYAll: () =>
+    get().expenses.reduce((acc, e) => acc + (Number(e.amountJPY) || 0), 0),
+
   // ====== Packing list ======
   addPackingItem: (label) =>
     set((s) => ({
@@ -243,7 +319,9 @@ export const useItineraryStore = create((set, get) => ({
   // ====== Selectores ======
   placesBySelectedDate: () => {
     const { places, selectedDate } = get();
-    return places.filter((p) => p.date === selectedDate);
+    return places.filter(
+      (p) => p.date === selectedDate || p.previewDate === selectedDate
+    );
   },
 
   routesBySelectedDate: () => {
@@ -265,6 +343,7 @@ export const useItineraryStore = create((set, get) => ({
     set({
       places: [],
       routes: [],
+      expenses: [],
       selectedId: null,
       days: [todayISO()],
       selectedDate: todayISO(),
@@ -276,6 +355,7 @@ export const useItineraryStore = create((set, get) => ({
     const {
       places,
       routes,
+      expenses,
       days,
       selectedDate,
       currency,
@@ -285,7 +365,7 @@ export const useItineraryStore = create((set, get) => ({
     } = get();
     return JSON.stringify(
       {
-        version: 6,
+        version: 7,
         country: "Japan",
         days,
         selectedDate,
@@ -293,6 +373,7 @@ export const useItineraryStore = create((set, get) => ({
         ui,
         places,
         routes,
+        expenses,
         packingItems,
         collaborators,
       },
@@ -321,6 +402,13 @@ export const useItineraryStore = create((set, get) => ({
         id: r.id ?? uuid(),
         type: "route",
         ...r,
+      })),
+      expenses: (data.expenses || []).map((e) => ({
+        id: e.id ?? uuid(),
+        type: "expense",
+        kind: e.kind || "personal",
+        participants: Array.isArray(e.participants) ? e.participants : [],
+        ...e,
       })),
       selectedId: null,
       days: days.length ? days : [todayISO()],

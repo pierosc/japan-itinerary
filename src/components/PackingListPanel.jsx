@@ -36,7 +36,7 @@ export default function PackingListPanel() {
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="list-panel">
       <div>
         <h2 className="font-semibold mb-1">Packing list</h2>
         <p className="text-xs text-gray-600">
@@ -59,7 +59,7 @@ export default function PackingListPanel() {
         </button>
       </div>
 
-      <ul className="list">
+      <ul className="list scroll-list">
         {items.map((item) => (
           <li
             key={item.id}
