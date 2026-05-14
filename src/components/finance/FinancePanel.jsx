@@ -1,4 +1,5 @@
 // src/components/finance/FinancePanel.jsx
+import { useEffect } from "react";
 import { useItineraryStore } from "../../hooks/useItineraryStore";
 import BudgetSummary from "./BudgetSummary";
 import CurrencyConverter from "./CurrencyConverter";
@@ -6,7 +7,12 @@ import ExpenseLedger from "./ExpenseLedger";
 
 export default function FinancePanel({ trip, currentUser }) {
   const financeOpen = useItineraryStore((s) => s.ui.financeOpen);
+  const setFinanceOpen = useItineraryStore((s) => s.setFinanceOpen);
   const toggleFinance = useItineraryStore((s) => s.toggleFinance);
+
+  useEffect(() => {
+    setFinanceOpen(true);
+  }, [setFinanceOpen]);
 
   return (
     <div className="card">

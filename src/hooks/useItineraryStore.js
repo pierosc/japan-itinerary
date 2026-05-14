@@ -3,6 +3,27 @@ import { create } from "zustand";
 import { v4 as uuid } from "uuid";
 
 const speedsKmh = { walk: 4.5, train: 60, car: 35 };
+const UI_PREFS_KEY = "trip-planner:ui-prefs";
+
+function loadUIPrefs() {
+  if (typeof localStorage === "undefined") return {};
+  try {
+    return JSON.parse(localStorage.getItem(UI_PREFS_KEY) || "{}");
+  } catch (err) {
+    console.warn("Error leyendo preferencias de UI", err);
+    return {};
+  }
+}
+
+function saveUIPrefs(patch) {
+  if (typeof localStorage === "undefined") return;
+  try {
+    const prev = loadUIPrefs();
+    localStorage.setItem(UI_PREFS_KEY, JSON.stringify({ ...prev, ...patch }));
+  } catch (err) {
+    console.warn("Error guardando preferencias de UI", err);
+  }
+}
 
 function todayISO() {
   const d = new Date();
@@ -12,19 +33,22 @@ function todayISO() {
   return `${y}-${m}-${day}`;
 }
 const D0 = todayISO();
+const initialUIPrefs = loadUIPrefs();
+const defaultCurrency = { code: "USD", ratePerJPY: 0.0065 };
 
 export const useItineraryStore = create((set, get) => ({
   // ===== Datos base =====
   places: [],
   routes: [],
   expenses: [],
+  dayMaps: {},
 
   days: [D0],
   selectedDate: D0,
   selectedId: null,
 
   // Conversión de moneda
-  currency: { code: "USD", ratePerJPY: 0.0065 },
+  currency: initialUIPrefs.currency || defaultCurrency,
 
   // Packing list
   packingItems: [
@@ -39,13 +63,13 @@ export const useItineraryStore = create((set, get) => ({
   // ===== UI global =====
   ui: {
     showMap: true,
-    financeOpen: false,
+    financeOpen: true,
     routeVisible: true,
     basemap: "carto-en",
     clickToAddEnabled: false,
     mapTilerKey: "",
     sidebarTab: "itinerary", // itinerary | myplaces | finance | settings | users | packing
-    theme: "light", // light por defecto
+    theme: initialUIPrefs.theme || "light", // light por defecto
     storageMode: "online", // "local" | "online" (online por defecto)
     autoSaveEnabled: true,
     autoSaveIntervalMin: 3,
@@ -53,6 +77,7 @@ export const useItineraryStore = create((set, get) => ({
 
   // ====== Acciones UI ======
   setShowMap: (v) => set((s) => ({ ui: { ...s.ui, showMap: v } })),
+  setFinanceOpen: (v) => set((s) => ({ ui: { ...s.ui, financeOpen: v } })),
   toggleFinance: () =>
     set((s) => ({ ui: { ...s.ui, financeOpen: !s.ui.financeOpen } })),
   toggleRoute: () =>
@@ -66,14 +91,21 @@ export const useItineraryStore = create((set, get) => ({
     })),
   setMapTilerKey: (k) => set((s) => ({ ui: { ...s.ui, mapTilerKey: k } })),
   setSidebarTab: (tab) => set((s) => ({ ui: { ...s.ui, sidebarTab: tab } })),
-  setTheme: (theme) => set((s) => ({ ui: { ...s.ui, theme } })),
+  setTheme: (theme) => {
+    saveUIPrefs({ theme });
+    set((s) => ({ ui: { ...s.ui, theme } }));
+  },
   toggleTheme: () =>
-    set((s) => ({
-      ui: {
-        ...s.ui,
-        theme: s.ui.theme === "light" ? "dark" : "light",
-      },
-    })),
+    set((s) => {
+      const theme = s.ui.theme === "light" ? "dark" : "light";
+      saveUIPrefs({ theme });
+      return {
+        ui: {
+          ...s.ui,
+          theme,
+        },
+      };
+    }),
   setStorageMode: (mode) =>
     set((s) => ({ ui: { ...s.ui, storageMode: mode } })),
   setAutoSaveEnabled: (v) =>
@@ -97,14 +129,17 @@ export const useItineraryStore = create((set, get) => ({
   },
 
   removeDay: (date) => {
-    const { days, places, routes, expenses } = get();
+    const { days, places, routes, expenses, dayMaps } = get();
     const remaining = days.filter((d) => d !== date);
     const fallbackDate = remaining.length ? remaining[0] : todayISO();
+    const nextDayMaps = { ...dayMaps };
+    delete nextDayMaps[date];
     set({
       days: remaining.length ? remaining : [fallbackDate],
       places: places.map((p) => (p.date === date ? { ...p, date: null } : p)),
       routes: routes.filter((r) => r.date !== date),
       expenses: expenses.filter((e) => e.date !== date),
+      dayMaps: nextDayMaps,
       selectedDate: fallbackDate,
       selectedId: null,
     });
@@ -128,6 +163,42 @@ export const useItineraryStore = create((set, get) => ({
         expenses: s.expenses.map((e) =>
           e.date === fromDate ? { ...e, date: toDate } : e
         ),
+        dayMaps: Object.fromEntries(
+          Object.entries(s.dayMaps || {}).map(([date, map]) => [
+            date === fromDate ? toDate : date,
+            map,
+          ])
+        ),
+      };
+    }),
+
+  setDayMap: (date, map) =>
+    set((s) => ({
+      dayMaps: {
+        ...s.dayMaps,
+        [date]: {
+          ...(s.dayMaps?.[date] || {}),
+          ...map,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    })),
+
+  removeDayMap: (date) =>
+    set((s) => {
+      const next = { ...(s.dayMaps || {}) };
+      delete next[date];
+      return {
+        dayMaps: next,
+        places: s.places.map((p) =>
+          p.date === date && p.mapMode === "image"
+            ? { ...p, date: null, previewDate: null }
+            : p
+        ),
+        selectedId:
+          s.places.find((p) => p.id === s.selectedId)?.date === date
+            ? null
+            : s.selectedId,
       };
     }),
 
@@ -332,13 +403,29 @@ export const useItineraryStore = create((set, get) => ({
   },
 
   // ====== Totales ======
-  totalJPYForDate: (date) =>
-    get()
-      .places.filter((p) => p.date === date)
-      .reduce((acc, p) => acc + (Number(p.spendJPY) || 0), 0),
+  totalJPYForDate: (date) => {
+    const { places, routes } = get();
+    const placesJPY = places
+      .filter((p) => p.date === date)
+      .reduce((acc, p) => acc + (Number(p.spendJPY) || 0), 0);
+    const routesJPY = routes
+      .filter((r) => r.date === date)
+      .reduce((acc, r) => acc + (Number(r.priceJPY) || 0), 0);
+    return placesJPY + routesJPY;
+  },
 
-  totalJPYAll: () =>
-    get().places.reduce((acc, p) => acc + (Number(p.spendJPY) || 0), 0),
+  totalJPYAll: () => {
+    const { places, routes } = get();
+    const placesJPY = places.reduce(
+      (acc, p) => acc + (Number(p.spendJPY) || 0),
+      0
+    );
+    const routesJPY = routes.reduce(
+      (acc, r) => acc + (Number(r.priceJPY) || 0),
+      0
+    );
+    return placesJPY + routesJPY;
+  },
 
   // ====== Export / Import ======
   clearAll: () =>
@@ -346,6 +433,7 @@ export const useItineraryStore = create((set, get) => ({
       places: [],
       routes: [],
       expenses: [],
+      dayMaps: {},
       selectedId: null,
       days: [todayISO()],
       selectedDate: todayISO(),
@@ -358,6 +446,7 @@ export const useItineraryStore = create((set, get) => ({
       places,
       routes,
       expenses,
+      dayMaps,
       days,
       selectedDate,
       currency,
@@ -367,7 +456,7 @@ export const useItineraryStore = create((set, get) => ({
     } = get();
     return JSON.stringify(
       {
-        version: 7,
+        version: 8,
         country: "Japan",
         days,
         selectedDate,
@@ -376,6 +465,7 @@ export const useItineraryStore = create((set, get) => ({
         places,
         routes,
         expenses,
+        dayMaps,
         packingItems,
         collaborators,
       },
@@ -391,7 +481,8 @@ export const useItineraryStore = create((set, get) => ({
         ? data.days
         : [...new Set((data.places || []).map((p) => p.date).filter(Boolean))];
 
-    const prevUi = get().ui;
+    const prevState = get();
+    const prevUi = prevState.ui;
 
     set({
       places: (data.places || []).map((p) => ({
@@ -412,12 +503,15 @@ export const useItineraryStore = create((set, get) => ({
         participants: Array.isArray(e.participants) ? e.participants : [],
         ...e,
       })),
+      dayMaps: data.dayMaps || {},
       selectedId: null,
       days: days.length ? days : [todayISO()],
       selectedDate: data.selectedDate ?? days[0] ?? todayISO(),
-      currency: data.currency ?? { code: "USD", ratePerJPY: 0.0065 },
+      currency: prevState.currency || data.currency || defaultCurrency,
       ui: {
         ...prevUi,
+        theme: prevUi.theme || initialUIPrefs.theme || data.ui?.theme || "light",
+        financeOpen: data.ui?.financeOpen ?? prevUi.financeOpen ?? true,
         autoSaveEnabled:
           data.ui?.autoSaveEnabled ?? prevUi.autoSaveEnabled ?? true,
         autoSaveIntervalMin:
@@ -436,12 +530,18 @@ export const useItineraryStore = create((set, get) => ({
 
   // ====== Moneda ======
   setCurrencyCode: (code) =>
-    set((s) => ({ currency: { ...s.currency, code } })),
+    set((s) => {
+      const currency = { ...s.currency, code };
+      saveUIPrefs({ currency });
+      return { currency };
+    }),
 
   setCurrencyRatePerJPY: (ratePerJPY) =>
-    set((s) => ({
-      currency: { ...s.currency, ratePerJPY: Number(ratePerJPY) || 0 },
-    })),
+    set((s) => {
+      const currency = { ...s.currency, ratePerJPY: Number(ratePerJPY) || 0 };
+      saveUIPrefs({ currency });
+      return { currency };
+    }),
 
   speedsKmh,
   // ====== Volver a My places ======

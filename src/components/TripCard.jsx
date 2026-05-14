@@ -4,19 +4,27 @@ function computeTripSummaryFromData(data) {
   const days = Array.isArray(data?.days) ? data.days.length : 0;
   const places = Array.isArray(data?.places) ? data.places.length : 0;
 
-  const spendJPY = Array.isArray(data?.places)
+  const placesJPY = Array.isArray(data?.places)
     ? data.places.reduce((acc, p) => acc + (Number(p?.spendJPY) || 0), 0)
     : 0;
+  const routesJPY = Array.isArray(data?.routes)
+    ? data.routes.reduce((acc, r) => acc + (Number(r?.priceJPY) || 0), 0)
+    : 0;
+  const expensesJPY = Array.isArray(data?.expenses)
+    ? data.expenses.reduce((acc, e) => acc + (Number(e?.amountJPY) || 0), 0)
+    : 0;
+  const spendJPY = placesJPY + routesJPY + expensesJPY;
 
   const rate = Number(data?.currency?.ratePerJPY) || 0;
-  const spendUSD = rate ? spendJPY * rate : null;
+  const currencyCode = data?.currency?.code || "USD";
+  const spendConverted = rate ? spendJPY * rate : null;
 
   // packing list en tu store es packingItems
   const packing = Array.isArray(data?.packingItems)
     ? data.packingItems.length
     : 0;
 
-  return { days, places, packing, spendJPY, spendUSD };
+  return { days, places, packing, spendJPY, spendConverted, currencyCode };
 }
 
 export default function TripCard({ trip, onClick }) {
@@ -45,8 +53,10 @@ export default function TripCard({ trip, onClick }) {
           <span>🗓 {summary.days} días</span>
           <span>📍 {summary.places} lugares</span>
           <span>🎒 {summary.packing} items</span>
-          {summary.spendUSD !== null && (
-            <span>💸 ${summary.spendUSD.toFixed(0)}</span>
+          {summary.spendConverted !== null && (
+            <span>
+              💸 {summary.currencyCode} {summary.spendConverted.toFixed(0)}
+            </span>
           )}
         </div>
 

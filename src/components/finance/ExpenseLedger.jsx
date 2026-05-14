@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useItineraryStore } from "../../hooks/useItineraryStore";
+import { formatConvertedJPY } from "../../utils/money";
 
 function fmt(n) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(n);
@@ -210,10 +211,23 @@ export default function ExpenseLedger({ trip, currentUser }) {
                           Entre: {(expense.participants || []).join(", ")}
                         </div>
                       )}
+                      {expense.kind === "shared" && (
+                        <div className="text-xs">
+                          Por persona:{" "}
+                          {formatConvertedJPY(
+                            (Number(expense.amountJPY) || 0) /
+                              ((expense.participants || []).length || 1),
+                            currency
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div style={{ textAlign: "right" }}>
                       <div className="font-semibold">
                         ¥{fmt(Number(expense.amountJPY) || 0)}
+                      </div>
+                      <div className="text-xs">
+                        {formatConvertedJPY(expense.amountJPY, currency)}
                       </div>
                       <button
                         className="btn-outline text-xs"

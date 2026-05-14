@@ -1,5 +1,6 @@
 // src/components/PlannerAppBar.jsx
 import { UserButton } from "@clerk/clerk-react";
+import CurrencySelector from "./CurrencySelector";
 
 export default function PlannerAppBar({
   trip,
@@ -32,6 +33,8 @@ export default function PlannerAppBar({
       </div>
 
       <div className="planner-appbar-right">
+        <CurrencySelector compact />
+
         {saveMessage && (
           <span className="planner-appbar-status">{saveMessage}</span>
         )}

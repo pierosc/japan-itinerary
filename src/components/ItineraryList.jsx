@@ -17,6 +17,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import SortableItemWithHandle from "./dnd/SortableItemWithHandle";
+import { formatConvertedJPY } from "../utils/money";
 
 const MODE_ICON = { walk: "🚶", train: "🚆", car: "🚗" };
 
@@ -34,6 +35,7 @@ export default function ItineraryList() {
     updateRoute,
     setShowMap,
     ui,
+    dayMaps,
 
     // ✅ My places
     unassignedPlaces,
@@ -41,6 +43,7 @@ export default function ItineraryList() {
     updatePlace,
     places,
     unassignPlace, // ✅ NUEVO
+    currency,
   } = useItineraryStore();
 
   const [editingRoute, setEditingRoute] = useState(null);
@@ -51,6 +54,7 @@ export default function ItineraryList() {
   const placesForDay = placesBySelectedDate();
   const routes = routesBySelectedDate();
   const pool = unassignedPlaces(); // date=null
+  const hasImageMap = Boolean(dayMaps?.[selectedDate]?.imageUrl);
 
   const canAddLoose = Boolean(selectedDate) && Boolean(selectedLooseId);
 
@@ -132,6 +136,12 @@ export default function ItineraryList() {
   const numFor = (pId) => idsForDnd.indexOf(pId) + 1;
 
   function distMins(a, b, mode) {
+    if (a.mapMode === "image" || b.mapMode === "image") {
+      const dx = Number(a.mapX) - Number(b.mapX);
+      const dy = Number(a.mapY) - Number(b.mapY);
+      const px = Math.sqrt(dx * dx + dy * dy);
+      return `${Math.round(px)} px en el plano`;
+    }
     const d = haversineKm(a, b);
     const spd = speedsKmh[mode] || speedsKmh.walk;
     const mins = Math.round((d / spd) * 60);
@@ -144,6 +154,17 @@ export default function ItineraryList() {
     if (!from || !to) return;
 
     let geojson = null;
+    if (from.mapMode === "image" || to.mapMode === "image") {
+      const { addRouteBetween } = useItineraryStore.getState();
+      addRouteBetween(selectedDate, a, b, mode, null);
+      const newRoute = useItineraryStore
+        .getState()
+        .routesBySelectedDate()
+        .find((r) => r.fromId === a && r.toId === b);
+      if (newRoute) setEditingRoute(newRoute.id);
+      return;
+    }
+
     if (mode === "walk" || mode === "car") {
       try {
         const prof = mode === "walk" ? "foot" : "driving";
@@ -233,7 +254,10 @@ export default function ItineraryList() {
             ) : (
               <>
                 {route.priceJPY != null && (
-                  <span className="text-xs">¥{route.priceJPY}</span>
+                  <span className="text-xs">
+                    ¥{route.priceJPY} (
+                    {formatConvertedJPY(route.priceJPY, currency)})
+                  </span>
                 )}
                 {route.durationMin != null && (
                   <span className="text-xs">· {route.durationMin} min</span>
@@ -343,10 +367,18 @@ export default function ItineraryList() {
           className="btn"
           onClick={() =>
             addPlace({
-              name: "Nuevo punto",
-              category: "otro",
-              lat: 35.6804,
-              lng: 139.769,
+              name: hasImageMap ? "Nuevo pin" : "Nuevo punto",
+              category: hasImageMap ? "atraccion" : "otro",
+              ...(hasImageMap
+                ? {
+                    mapMode: "image",
+                    mapX: (dayMaps[selectedDate]?.width || 1600) / 2,
+                    mapY: (dayMaps[selectedDate]?.height || 1000) / 2,
+                  }
+                : {
+                    lat: 35.6804,
+                    lng: 139.769,
+                  }),
               notes: "",
             })
           }
@@ -428,7 +460,10 @@ export default function ItineraryList() {
                               {p.startTime ? `Inicio: ${p.startTime} · ` : ""}
                               Estancia: {p.durationMin ?? 60} min
                               {typeof p.spendJPY === "number"
-                                ? ` · Gasto: ¥${p.spendJPY}`
+                                ? ` · Gasto: ¥${p.spendJPY} (${formatConvertedJPY(
+                                    p.spendJPY,
+                                    currency
+                                  )})`
                                 : ""}
                             </div>
                             {p.sourceUrl && (

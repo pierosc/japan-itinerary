@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useItineraryStore } from "../hooks/useItineraryStore";
 import MenuImageModal from "./MenuImageModal";
 import PlaceItemsEditor from "./PlaceItemsEditor";
+import { formatConvertedJPY } from "../utils/money";
 
 const CATEGORIES = [
   "restaurante",
@@ -16,7 +17,8 @@ const CATEGORIES = [
 ];
 
 export default function PlaceEditor({ place }) {
-  const { updatePlace, removePlace, setSelected } = useItineraryStore();
+  const { updatePlace, removePlace, setSelected, currency } =
+    useItineraryStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const [imgUrl, setImgUrl] = useState(""); // para agregar imagen por URL
 
@@ -119,6 +121,9 @@ export default function PlaceEditor({ place }) {
               updatePlace(place.id, { spendJPY: onNum(e.target.value, 0) })
             }
           />
+          <span className="text-xs">
+            {formatConvertedJPY(place.spendJPY || 0, currency)}
+          </span>
         </label>
         <label>
           <span className="text-xs">Rango de precio</span>
@@ -172,31 +177,69 @@ export default function PlaceEditor({ place }) {
           </>
         )}
 
-        {/* Coordenadas */}
-        <label>
-          <span className="text-xs">Lat</span>
-          <input
-            type="number"
-            step="0.000001"
-            className="input"
-            value={place.lat ?? ""}
-            onChange={(e) =>
-              updatePlace(place.id, { lat: onNum(e.target.value, place.lat) })
-            }
-          />
-        </label>
-        <label>
-          <span className="text-xs">Lng</span>
-          <input
-            type="number"
-            step="0.000001"
-            className="input"
-            value={place.lng ?? ""}
-            onChange={(e) =>
-              updatePlace(place.id, { lng: onNum(e.target.value, place.lng) })
-            }
-          />
-        </label>
+        {place.mapMode === "image" ? (
+          <>
+            <label>
+              <span className="text-xs">X en plano</span>
+              <input
+                type="number"
+                step="1"
+                className="input"
+                value={Math.round(place.mapX ?? 0)}
+                onChange={(e) =>
+                  updatePlace(place.id, {
+                    mapX: onNum(e.target.value, place.mapX),
+                  })
+                }
+              />
+            </label>
+            <label>
+              <span className="text-xs">Y en plano</span>
+              <input
+                type="number"
+                step="1"
+                className="input"
+                value={Math.round(place.mapY ?? 0)}
+                onChange={(e) =>
+                  updatePlace(place.id, {
+                    mapY: onNum(e.target.value, place.mapY),
+                  })
+                }
+              />
+            </label>
+          </>
+        ) : (
+          <>
+            <label>
+              <span className="text-xs">Lat</span>
+              <input
+                type="number"
+                step="0.000001"
+                className="input"
+                value={place.lat ?? ""}
+                onChange={(e) =>
+                  updatePlace(place.id, {
+                    lat: onNum(e.target.value, place.lat),
+                  })
+                }
+              />
+            </label>
+            <label>
+              <span className="text-xs">Lng</span>
+              <input
+                type="number"
+                step="0.000001"
+                className="input"
+                value={place.lng ?? ""}
+                onChange={(e) =>
+                  updatePlace(place.id, {
+                    lng: onNum(e.target.value, place.lng),
+                  })
+                }
+              />
+            </label>
+          </>
+        )}
 
         {/* Notas */}
         <label className="col-span-2">

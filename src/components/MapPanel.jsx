@@ -7,6 +7,7 @@ import {
   useMap,
   useMapEvents,
   Polyline,
+  ImageOverlay,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -110,6 +111,31 @@ function ClickToAdd({ enabled }) {
   return null;
 }
 
+function ClickToAddImagePin({ enabled }) {
+  const addPlace = useItineraryStore((s) => s.addPlace);
+  const setSelected = useItineraryStore((s) => s.setSelected);
+
+  useMapEvents({
+    click(e) {
+      if (!enabled) return;
+      const target = e.originalEvent?.target;
+      if (target && target.closest?.(".map-ui-overlay")) return;
+
+      const id = addPlace({
+        name: "Nuevo pin",
+        category: "atraccion",
+        mapMode: "image",
+        mapX: e.latlng.lng,
+        mapY: e.latlng.lat,
+        notes: "",
+      });
+      if (id) setSelected(id);
+    },
+  });
+
+  return null;
+}
+
 function FitToDayPlaces({ places, fallbackBounds }) {
   const map = useMap();
   const key = places.map((p) => `${p.id}:${p.lat}:${p.lng}`).join("|");
@@ -133,6 +159,51 @@ function FitToDayPlaces({ places, fallbackBounds }) {
   return null;
 }
 
+function FitToImageMap({ imageBounds, places }) {
+  const map = useMap();
+  const key = places.map((p) => `${p.id}:${p.mapX}:${p.mapY}`).join("|");
+
+  useEffect(() => {
+    window.requestAnimationFrame(() => {
+      if (places.length) {
+        const pointBounds = L.latLngBounds(places.map((p) => [p.mapY, p.mapX]));
+        if (places.length === 1) {
+          map.setView(pointBounds.getCenter(), 0);
+        } else {
+          map.fitBounds(pointBounds, { padding: [52, 52], maxZoom: 2 });
+        }
+        return;
+      }
+
+      map.fitBounds(imageBounds, { padding: [24, 24] });
+    });
+  }, [imageBounds, key, map, places]);
+
+  return null;
+}
+
+function ImageMapLoader({ imageUrl, selectedDate }) {
+  const setDayMap = useItineraryStore((s) => s.setDayMap);
+
+  useEffect(() => {
+    if (!imageUrl) return;
+    const img = new Image();
+    img.onload = () => {
+      setDayMap(selectedDate, {
+        imageUrl,
+        width: img.naturalWidth || 1600,
+        height: img.naturalHeight || 1000,
+      });
+    };
+    img.onerror = () => {
+      alert("No se pudo cargar esa imagen. Revisa que sea una URL directa o un archivo de imagen valido.");
+    };
+    img.src = imageUrl;
+  }, [imageUrl, selectedDate, setDayMap]);
+
+  return null;
+}
+
 export default function MapPanel() {
   const {
     placesBySelectedDate,
@@ -140,6 +211,10 @@ export default function MapPanel() {
     selectedId,
     setSelected,
     updatePlace,
+    selectedDate,
+    dayMaps,
+    setDayMap,
+    removeDayMap,
     ui,
     setBasemap,
     toggleRoute,
@@ -150,9 +225,24 @@ export default function MapPanel() {
 
   const places = placesBySelectedDate();
   const routes = routesBySelectedDate();
+  const imagePlaces = places.filter(
+    (p) =>
+      p.mapMode === "image" &&
+      Number.isFinite(Number(p.mapX)) &&
+      Number.isFinite(Number(p.mapY))
+  );
+  const geoPlaces = places.filter(
+    (p) =>
+      p.mapMode !== "image" &&
+      Number.isFinite(Number(p.lat)) &&
+      Number.isFinite(Number(p.lng))
+  );
   const [searchQuery, setSearchQuery] = useState("");
+  const [imageUrlDraft, setImageUrlDraft] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
+  const [controlsCollapsed, setControlsCollapsed] = useState(false);
   const mapRef = useRef(null);
+  const fileRef = useRef(null);
 
   const bounds = useMemo(
     () => L.latLngBounds(JAPAN_BOUNDS.map(([a, b]) => [a, b])),
@@ -160,6 +250,18 @@ export default function MapPanel() {
   );
   const basemaps = BASEMAPS(ui.mapTilerKey);
   const bm = basemaps[ui.basemap] || basemaps["carto-en"];
+  const dayMap = dayMaps?.[selectedDate] || null;
+  const hasImageMap = Boolean(dayMap?.imageUrl);
+  const imageWidth = Number(dayMap?.width) || 1600;
+  const imageHeight = Number(dayMap?.height) || 1000;
+  const imageBounds = useMemo(
+    () =>
+      L.latLngBounds([
+        [0, 0],
+        [imageHeight, imageWidth],
+      ]),
+    [imageHeight, imageWidth]
+  );
 
   if (!ui.showMap && selectedId) return <SelectedPlaceView />;
 
@@ -213,47 +315,151 @@ export default function MapPanel() {
     setSidebarTab("itinerary");
   };
 
+  const loadImageUrl = () => {
+    const url = imageUrlDraft.trim();
+    if (!/^https?:\/\/.+/i.test(url)) {
+      alert("Pon una URL de imagen valida que empiece con http:// o https://");
+      return;
+    }
+    setDayMap(selectedDate, { imageUrl: url, source: "url", name: url });
+    setImageUrlDraft("");
+  };
+
+  const handleImageFile = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("El archivo debe ser una imagen.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setDayMap(selectedDate, {
+        imageUrl: reader.result,
+        source: "upload",
+        name: file.name,
+      });
+    };
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  };
+
+  const mapHint = hasImageMap
+    ? "Click agrega pin sobre tu plano. Arrastra los pines para ajustar."
+    : "Puedes usar un mapa normal o cargar un plano del parque para este dia.";
+
   return (
     <div className="h-full w-full" style={{ position: "relative" }}>
       <div
-        className="map-ui-overlay"
+        className={`map-ui-overlay ${
+          controlsCollapsed ? "map-ui-overlay--collapsed" : ""
+        }`}
       >
-        <form
-          className="map-search"
-          onSubmit={handleSearch}
-        >
-          <input
-            className="input"
-            placeholder="Buscar lugar (Tokyo Station, Akihabara, ...)"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          <button className="btn" type="submit" disabled={searchLoading}>
-            {searchLoading ? "Buscando..." : "Buscar"}
+        <div className="map-overlay-header">
+          <div className="map-overlay-title">
+            <span>{hasImageMap ? "Mapa del dia" : "Mapa"}</span>
+            {hasImageMap && !controlsCollapsed && (
+              <span className="chip">Plano activo</span>
+            )}
+          </div>
+          <button
+            className="icon-button map-collapse-button"
+            type="button"
+            onClick={() => setControlsCollapsed((v) => !v)}
+            title={controlsCollapsed ? "Expandir controles" : "Minimizar controles"}
+            aria-label={controlsCollapsed ? "Expandir controles" : "Minimizar controles"}
+          >
+            {controlsCollapsed ? "+" : "-"}
           </button>
-        </form>
+        </div>
 
-        <div className="map-controls">
-          <label className="map-basemap">
-            <span>Mapa base</span>
-            <select
+        {!controlsCollapsed && !hasImageMap && (
+          <form className="map-search" onSubmit={handleSearch}>
+            <input
               className="input"
-              value={ui.basemap}
-              onChange={(e) => setBasemap(e.target.value)}
-            >
-              {Object.entries(basemaps).map(([k, v]) => (
-                <option
-                  key={k}
-                  value={k}
-                  disabled={k === "maptiler-es" && !ui.mapTilerKey}
-                >
-                  {v.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              placeholder="Buscar lugar (Tokyo Station, Akihabara, ...)"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <button className="btn" type="submit" disabled={searchLoading}>
+              {searchLoading ? "Buscando..." : "Buscar"}
+            </button>
+          </form>
+        )}
 
-          {ui.basemap === "maptiler-es" && !ui.mapTilerKey && (
+        {!controlsCollapsed && (
+        <div className="map-controls">
+          <div className="custom-map-box">
+            <div className="custom-map-title">
+              <span>Mapa del dia</span>
+              {hasImageMap && <span className="chip">Plano activo</span>}
+            </div>
+            <div className="text-xs">{mapHint}</div>
+            <div className="custom-map-row">
+              <input
+                className="input"
+                placeholder="URL de imagen del parque"
+                value={imageUrlDraft}
+                onChange={(e) => setImageUrlDraft(e.target.value)}
+              />
+              <button className="btn-outline" type="button" onClick={loadImageUrl}>
+                Usar URL
+              </button>
+            </div>
+            <div className="map-actions">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden-file-input"
+                onChange={handleImageFile}
+              />
+              <button
+                className="btn-outline"
+                type="button"
+                onClick={() => fileRef.current?.click()}
+              >
+                Subir imagen
+              </button>
+              {hasImageMap && (
+                <button
+                  className="btn-outline"
+                  type="button"
+                  onClick={() => {
+                    if (confirm("Quitar el plano de este dia? Los pines pasan a My Places.")) {
+                      removeDayMap(selectedDate);
+                    }
+                  }}
+                >
+                  Quitar plano
+                </button>
+              )}
+            </div>
+          </div>
+
+          {!hasImageMap && (
+            <label className="map-basemap">
+              <span>Mapa base</span>
+              <select
+                className="input"
+                value={ui.basemap}
+                onChange={(e) => setBasemap(e.target.value)}
+              >
+                {Object.entries(basemaps).map(([k, v]) => (
+                  <option
+                    key={k}
+                    value={k}
+                    disabled={k === "maptiler-es" && !ui.mapTilerKey}
+                  >
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {!hasImageMap && ui.basemap === "maptiler-es" && !ui.mapTilerKey && (
             <div className="text-xs">
               Para etiquetas en espanol, guarda tu clave de MapTiler en
               Configuracion.
@@ -278,54 +484,118 @@ export default function MapPanel() {
             </button>
           </div>
         </div>
+        )}
       </div>
 
-      <MapContainer
-        bounds={bounds}
-        className="h-full w-full rounded-lg"
-        scrollWheelZoom
-        ref={mapRef}
-      >
-        {bm.url && <TileLayer attribution={bm.attr} url={bm.url} />}
+      {hasImageMap ? (
+        <MapContainer
+          key={`image-${selectedDate}-${dayMap.imageUrl}`}
+          crs={L.CRS.Simple}
+          bounds={imageBounds}
+          minZoom={-4}
+          maxZoom={4}
+          className="h-full w-full rounded-lg custom-image-map"
+          scrollWheelZoom
+          ref={mapRef}
+        >
+          <ImageMapLoader imageUrl={dayMap.imageUrl} selectedDate={selectedDate} />
+          <ImageOverlay url={dayMap.imageUrl} bounds={imageBounds} />
+          <FitToImageMap imageBounds={imageBounds} places={imagePlaces} />
+          <ClickToAddImagePin enabled={Boolean(ui.clickToAddEnabled)} />
 
-        <FitToDayPlaces places={places} fallbackBounds={bounds} />
-        <ClickToAdd enabled={Boolean(ui.clickToAddEnabled)} />
+          {imagePlaces.map((p) => (
+            <Marker
+              key={p.id}
+              position={[p.mapY, p.mapX]}
+              icon={selectedId === p.id ? SELECTED_ICON : DEFAULT_ICON}
+              zIndexOffset={selectedId === p.id ? 1000 : 0}
+              eventHandlers={{
+                click: () => handleMarkerClick(p.id),
+                dragend: (ev) => {
+                  const { lat, lng } = ev.target.getLatLng();
+                  updatePlace(p.id, { mapX: lng, mapY: lat });
+                },
+              }}
+              draggable
+            >
+              <Popup>
+                <div>
+                  <div className="font-semibold">{p.name}</div>
+                  <div className="text-xs">({p.category})</div>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
 
-        {places.map((p) => (
-          <Marker
-            key={p.id}
-            position={[p.lat, p.lng]}
-            icon={selectedId === p.id ? SELECTED_ICON : DEFAULT_ICON}
-            zIndexOffset={selectedId === p.id ? 1000 : 0}
-            eventHandlers={{
-              click: () => handleMarkerClick(p.id),
-              dragend: (ev) => {
-                const { lat, lng } = ev.target.getLatLng();
-                updatePlace(p.id, { lat, lng });
-              },
-            }}
-            draggable
-          >
-            <Popup>
-              <div>
-                <div className="font-semibold">{p.name}</div>
-                <div className="text-xs">({p.category})</div>
-                <a
-                  className="text-blue-600 underline text-xs"
-                  href={`https://www.google.com/maps?q=${p.lat},${p.lng}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Ver en Google Maps
-                </a>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+          {ui.routeVisible &&
+            imagePlaces.map((p, i) => {
+              const next = imagePlaces[i + 1];
+              if (!next) return null;
+              return (
+                <Polyline
+                  key={`image-${p.id}-${next.id}`}
+                  positions={[
+                    [p.mapY, p.mapX],
+                    [next.mapY, next.mapX],
+                  ]}
+                  pathOptions={{
+                    color: "#2563eb",
+                    opacity: 0.8,
+                    weight: 3,
+                    dashArray: "4 6",
+                  }}
+                />
+              );
+            })}
+        </MapContainer>
+      ) : (
+        <MapContainer
+          key={`geo-${selectedDate}`}
+          bounds={bounds}
+          className="h-full w-full rounded-lg"
+          scrollWheelZoom
+          ref={mapRef}
+        >
+          {bm.url && <TileLayer attribution={bm.attr} url={bm.url} />}
 
-        {ui.routeVisible &&
-          places.map((p, i) => {
-            const next = places[i + 1];
+          <FitToDayPlaces places={geoPlaces} fallbackBounds={bounds} />
+          <ClickToAdd enabled={Boolean(ui.clickToAddEnabled)} />
+
+          {geoPlaces.map((p) => (
+            <Marker
+              key={p.id}
+              position={[p.lat, p.lng]}
+              icon={selectedId === p.id ? SELECTED_ICON : DEFAULT_ICON}
+              zIndexOffset={selectedId === p.id ? 1000 : 0}
+              eventHandlers={{
+                click: () => handleMarkerClick(p.id),
+                dragend: (ev) => {
+                  const { lat, lng } = ev.target.getLatLng();
+                  updatePlace(p.id, { lat, lng });
+                },
+              }}
+              draggable
+            >
+              <Popup>
+                <div>
+                  <div className="font-semibold">{p.name}</div>
+                  <div className="text-xs">({p.category})</div>
+                  <a
+                    className="text-blue-600 underline text-xs"
+                    href={`https://www.google.com/maps?q=${p.lat},${p.lng}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Ver en Google Maps
+                  </a>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+
+          {ui.routeVisible &&
+          geoPlaces.map((p, i) => {
+            const next = geoPlaces[i + 1];
             if (!next) return null;
             const hasRoute = routes.some(
               (r) => r.fromId === p.id && r.toId === next.id
@@ -349,10 +619,10 @@ export default function MapPanel() {
             );
           })}
 
-        {ui.routeVisible &&
+          {ui.routeVisible &&
           routes.map((r) => {
-            const from = places.find((p) => p.id === r.fromId);
-            const to = places.find((p) => p.id === r.toId);
+            const from = geoPlaces.find((p) => p.id === r.fromId);
+            const to = geoPlaces.find((p) => p.id === r.toId);
             if (!from || !to) return null;
 
             const line =
@@ -373,7 +643,8 @@ export default function MapPanel() {
               />
             );
           })}
-      </MapContainer>
+        </MapContainer>
+      )}
     </div>
   );
 }

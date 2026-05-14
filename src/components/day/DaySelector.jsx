@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useItineraryStore } from "../../hooks/useItineraryStore";
+import { formatConvertedJPY } from "../../utils/money";
 
 function CalendarDialog({
   open,
@@ -68,6 +69,7 @@ export default function DaySelector() {
     renameDay,
     totalJPYForDate,
     totalExpenseJPYForDate,
+    currency,
   } = useItineraryStore();
   const [dialog, setDialog] = useState(null);
 
@@ -104,7 +106,12 @@ export default function DaySelector() {
           <h2 className="font-semibold">Días del viaje</h2>
           <div className="text-xs">
             {days.length} día/s
-            {selectedTotal ? ` · ¥${selectedTotal}` : ""}
+            {selectedTotal
+              ? ` · ¥${selectedTotal} (${formatConvertedJPY(
+                  selectedTotal,
+                  currency
+                )})`
+              : ""}
           </div>
         </div>
 
@@ -118,7 +125,11 @@ export default function DaySelector() {
             const total = totalJPYForDate(d) + totalExpenseJPYForDate(d);
             return (
               <option key={d} value={d}>
-                {`${d}${total ? ` · ¥${total}` : ""}`}
+                {`${d}${
+                  total
+                    ? ` · ¥${total} (${formatConvertedJPY(total, currency)})`
+                    : ""
+                }`}
               </option>
             );
           })}
