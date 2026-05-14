@@ -1,13 +1,9 @@
-// src/components/ItineraryList.jsx
 import { useEffect, useMemo, useState } from "react";
-import { useItineraryStore } from "../hooks/useItineraryStore";
-import { haversineKm } from "../utils/geo";
-import CategoryBadge from "./CategoryBadge";
 import {
   DndContext,
-  closestCenter,
   KeyboardSensor,
   PointerSensor,
+  closestCenter,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -16,12 +12,17 @@ import {
   arrayMove,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import SortableItemWithHandle from "./dnd/SortableItemWithHandle";
+import { useItineraryStore } from "../hooks/useItineraryStore";
+import { haversineKm } from "../utils/geo";
 import { formatConvertedJPY } from "../utils/money";
+import CategoryBadge from "./CategoryBadge";
+import SortableItemWithHandle from "./dnd/SortableItemWithHandle";
+import { useFeedback } from "./ui/FeedbackProvider";
 
-const MODE_ICON = { walk: "🚶", train: "🚆", car: "🚗" };
+const MODE_LABEL = { walk: "A pie", train: "Tren", car: "Auto" };
 
 export default function ItineraryList() {
+  const { toast } = useFeedback();
   const {
     placesBySelectedDate,
     setSelected,
@@ -36,214 +37,158 @@ export default function ItineraryList() {
     setShowMap,
     ui,
     dayMaps,
-
-    // ✅ My places
     unassignedPlaces,
     assignPlaceToDay,
     updatePlace,
     places,
-    unassignPlace, // ✅ NUEVO
+    unassignPlace,
     currency,
   } = useItineraryStore();
 
   const [editingRoute, setEditingRoute] = useState(null);
-
-  // ✅ NUEVO: selector simple (1 lugar suelto)
   const [selectedLooseId, setSelectedLooseId] = useState("");
 
   const placesForDay = placesBySelectedDate();
   const routes = routesBySelectedDate();
-  const pool = unassignedPlaces(); // date=null
+  const pool = unassignedPlaces();
   const hasImageMap = Boolean(dayMaps?.[selectedDate]?.imageUrl);
-
   const canAddLoose = Boolean(selectedDate) && Boolean(selectedLooseId);
 
   useEffect(() => {
     if (selectedLooseId) return;
     places
-      .filter((p) => p.previewDate)
-      .forEach((p) => updatePlace(p.id, { previewDate: null }));
+      .filter((place) => place.previewDate)
+      .forEach((place) => updatePlace(place.id, { previewDate: null }));
   }, [places, selectedLooseId, updatePlace]);
 
-  const handleAddLooseToDay = () => {
+  const blocks = useMemo(() => {
+    const output = [];
+    for (let index = 0; index < placesForDay.length; index += 1) {
+      const current = placesForDay[index];
+      const next = placesForDay[index + 1];
+      output.push({ kind: "place", place: current });
+      if (next) {
+        const route =
+          routes.find(
+            (candidate) =>
+              candidate.fromId === current.id && candidate.toId === next.id
+          ) || null;
+        output.push({ kind: "route", from: current, to: next, route });
+      }
+    }
+    return output;
+  }, [placesForDay, routes]);
+
+  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor));
+  const idsForDnd = placesForDay.map((place) => place.id);
+  const numFor = (placeId) => idsForDnd.indexOf(placeId) + 1;
+
+  function handleAddLooseToDay() {
     if (!selectedDate) {
-      alert("Primero selecciona un día en el selector de días.");
+      toast({
+        title: "Selecciona un día",
+        message: "Elige un día antes de agregar lugares al itinerario.",
+        tone: "warning",
+      });
       return;
     }
     if (!selectedLooseId) return;
 
     assignPlaceToDay(selectedLooseId, selectedDate);
     updatePlace(selectedLooseId, { previewDate: null });
-
-    // opcional UX: abrir panel de edición
     setSelected(selectedLooseId);
     setShowMap(false);
-
     setSelectedLooseId("");
-  };
+    toast({ title: "Lugar agregado al itinerario", tone: "success" });
+  }
 
-  const handleLoosePreview = (id) => {
+  function handleLoosePreview(id) {
     setSelectedLooseId(id);
     places
-      .filter((p) => p.previewDate)
-      .forEach((p) => updatePlace(p.id, { previewDate: null }));
+      .filter((place) => place.previewDate)
+      .forEach((place) => updatePlace(place.id, { previewDate: null }));
+
     if (!id) {
       setSelected(null);
       return;
     }
-    const place = pool.find((p) => p.id === id);
-    if (place && !place.date) {
-      updatePlace(id, { previewDate: selectedDate });
-    }
+
+    const place = pool.find((candidate) => candidate.id === id);
+    if (place && !place.date) updatePlace(id, { previewDate: selectedDate });
     setSelected(id);
     setShowMap(true);
-  };
+  }
 
-  // bloques: ITEM → RUTA → ITEM …
-  const blocks = useMemo(() => {
-    const out = [];
-    for (let i = 0; i < placesForDay.length; i++) {
-      const cur = placesForDay[i];
-      const next = placesForDay[i + 1];
-      out.push({ kind: "place", place: cur });
-      if (next) {
-        const r =
-          routes.find((rr) => rr.fromId === cur.id && rr.toId === next.id) ||
-          null;
-        out.push({ kind: "route", from: cur, to: next, route: r });
-      }
-    }
-    return out;
-  }, [placesForDay, routes]);
-
-  // DnD solo items
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor)
-  );
-  const idsForDnd = placesForDay.map((p) => p.id);
-
-  function onDragEnd(e) {
-    const { active, over } = e;
+  function onDragEnd(event) {
+    const { active, over } = event;
     if (!over || active.id === over.id) return;
+
     const oldIndex = idsForDnd.indexOf(active.id);
     const newIndex = idsForDnd.indexOf(over.id);
     if (oldIndex === -1 || newIndex === -1) return;
-    const newIds = arrayMove(idsForDnd, oldIndex, newIndex);
-    reorderPlacesForDate(selectedDate, newIds);
+
+    reorderPlacesForDate(selectedDate, arrayMove(idsForDnd, oldIndex, newIndex));
   }
 
-  const numFor = (pId) => idsForDnd.indexOf(pId) + 1;
-
-  function distMins(a, b, mode) {
-    if (a.mapMode === "image" || b.mapMode === "image") {
-      const dx = Number(a.mapX) - Number(b.mapX);
-      const dy = Number(a.mapY) - Number(b.mapY);
-      const px = Math.sqrt(dx * dx + dy * dy);
-      return `${Math.round(px)} px en el plano`;
+  function distMins(from, to, mode) {
+    if (from.mapMode === "image" || to.mapMode === "image") {
+      const dx = Number(from.mapX) - Number(to.mapX);
+      const dy = Number(from.mapY) - Number(to.mapY);
+      return `${Math.round(Math.sqrt(dx * dx + dy * dy))} px en el plano`;
     }
-    const d = haversineKm(a, b);
-    const spd = speedsKmh[mode] || speedsKmh.walk;
-    const mins = Math.round((d / spd) * 60);
-    return `${d.toFixed(1)} km · ~${mins} min`;
+
+    const distance = haversineKm(from, to);
+    const speed = speedsKmh[mode] || speedsKmh.walk;
+    const minutes = Math.round((distance / speed) * 60);
+    return `${distance.toFixed(1)} km - ${minutes} min`;
   }
 
-  async function createRouteBetween(a, b, mode = "walk") {
-    const from = placesForDay.find((p) => p.id === a);
-    const to = placesForDay.find((p) => p.id === b);
+  async function createRouteBetween(fromId, toId, mode = "walk") {
+    const from = placesForDay.find((place) => place.id === fromId);
+    const to = placesForDay.find((place) => place.id === toId);
     if (!from || !to) return;
 
     let geojson = null;
-    if (from.mapMode === "image" || to.mapMode === "image") {
-      const { addRouteBetween } = useItineraryStore.getState();
-      addRouteBetween(selectedDate, a, b, mode, null);
-      const newRoute = useItineraryStore
-        .getState()
-        .routesBySelectedDate()
-        .find((r) => r.fromId === a && r.toId === b);
-      if (newRoute) setEditingRoute(newRoute.id);
-      return;
-    }
-
-    if (mode === "walk" || mode === "car") {
+    if (from.mapMode !== "image" && to.mapMode !== "image" && mode !== "train") {
       try {
-        const prof = mode === "walk" ? "foot" : "driving";
-        const resp = await fetch(
-          `https://router.project-osrm.org/route/v1/${prof}/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`
+        const profile = mode === "walk" ? "foot" : "driving";
+        const response = await fetch(
+          `https://router.project-osrm.org/route/v1/${profile}/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson`
         );
-        const data = await resp.json();
+        const data = await response.json();
         const coords = data.routes?.[0]?.geometry?.coordinates || [];
         geojson = coords.map(([lng, lat]) => [lat, lng]);
-      } catch (err) {
-        console.error("Error creando ruta OSRM", err);
+      } catch (error) {
+        console.error("Error creando ruta OSRM", error);
       }
     }
 
     const { addRouteBetween } = useItineraryStore.getState();
-    addRouteBetween(selectedDate, a, b, mode, geojson);
+    addRouteBetween(selectedDate, fromId, toId, mode, geojson);
 
     const newRoute = useItineraryStore
       .getState()
       .routesBySelectedDate()
-      .find((r) => r.fromId === a && r.toId === b);
+      .find((route) => route.fromId === fromId && route.toId === toId);
     if (newRoute) setEditingRoute(newRoute.id);
   }
 
   function RouteLine({ from, to, route }) {
     return (
-      <li
-        aria-label="route-line"
-        style={{ listStyle: "none", margin: "6px 0", pointerEvents: "none" }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "4px 8px",
-          }}
-        >
-          <span
-            title={route ? route.mode : "ruta"}
-            style={{ pointerEvents: "none" }}
-          >
-            {route ? MODE_ICON[route.mode] || "➡️" : " "}
-          </span>
-
-          <div
-            style={{
-              flex: 1,
-              borderTop: "2px solid #263247",
-              opacity: route ? 1 : 0.6,
-              pointerEvents: "none",
-            }}
-          />
-
-          <span
-            className="text-xs"
-            style={{
-              whiteSpace: "nowrap",
-              marginLeft: 6,
-              pointerEvents: "none",
-            }}
-          >
+      <li aria-label="route-line" style={{ listStyle: "none", margin: "6px 0" }}>
+        <div className="route-line">
+          <span className="text-xs">{route ? MODE_LABEL[route.mode] : ""}</span>
+          <div className="route-line-rule" />
+          <span className="text-xs">
             {route
-              ? `${route.name || `Ruta ${route.mode}`} · ${distMins(
+              ? `${route.name || `Ruta ${MODE_LABEL[route.mode]}`} - ${distMins(
                   from,
                   to,
                   route.mode
                 )}`
               : distMins(from, to, "walk")}
           </span>
-
-          <div
-            style={{
-              marginLeft: "auto",
-              display: "flex",
-              gap: 6,
-              pointerEvents: "auto",
-            }}
-          >
+          <div className="route-line-actions">
             {!route ? (
               <button
                 className="btn-outline"
@@ -255,26 +200,26 @@ export default function ItineraryList() {
               <>
                 {route.priceJPY != null && (
                   <span className="text-xs">
-                    ¥{route.priceJPY} (
+                    JPY {route.priceJPY} (
                     {formatConvertedJPY(route.priceJPY, currency)})
                   </span>
                 )}
                 {route.durationMin != null && (
-                  <span className="text-xs">· {route.durationMin} min</span>
+                  <span className="text-xs">- {route.durationMin} min</span>
                 )}
                 <button
                   className="btn-outline"
                   title="Editar ruta"
                   onClick={() => setEditingRoute(route.id)}
                 >
-                  ⚙️
+                  Editar
                 </button>
                 <button
                   className="btn-outline"
                   title="Eliminar ruta"
                   onClick={() => removeRoute(route.id)}
                 >
-                  🗑️
+                  Quitar
                 </button>
               </>
             )}
@@ -282,77 +227,61 @@ export default function ItineraryList() {
         </div>
 
         {route && editingRoute === route.id && (
-          <div
-            className="card"
-            style={{
-              marginTop: 8,
-              padding: 8,
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr 1fr auto",
-              gap: 8,
-              pointerEvents: "auto",
-            }}
-          >
+          <div className="card route-editor">
             <label>
-              <span className="text-xs">Nombre (opcional)</span>
+              <span className="text-xs">Nombre</span>
               <input
                 className="input"
                 value={route.name || ""}
-                onChange={(e) =>
-                  updateRoute(route.id, { name: e.target.value })
+                onChange={(event) =>
+                  updateRoute(route.id, { name: event.target.value })
                 }
                 placeholder="p. ej. Yamanote"
               />
             </label>
-
             <label>
               <span className="text-xs">Transporte</span>
               <select
                 className="input"
                 value={route.mode || "walk"}
-                onChange={(e) =>
-                  updateRoute(route.id, { mode: e.target.value })
+                onChange={(event) =>
+                  updateRoute(route.id, { mode: event.target.value })
                 }
               >
                 <option value="walk">a pie</option>
-                <option value="car">coche</option>
+                <option value="car">auto</option>
                 <option value="train">tren</option>
               </select>
             </label>
-
             <label>
               <span className="text-xs">Duración (min)</span>
               <input
                 type="number"
                 className="input"
                 value={route.durationMin ?? ""}
-                onChange={(e) =>
+                onChange={(event) =>
                   updateRoute(route.id, {
-                    durationMin: Number(e.target.value) || 0,
+                    durationMin: Number(event.target.value) || 0,
                   })
                 }
               />
             </label>
-
             <label>
-              <span className="text-xs">Precio (¥)</span>
+              <span className="text-xs">Precio (JPY)</span>
               <input
                 type="number"
                 className="input"
                 value={route.priceJPY ?? ""}
-                onChange={(e) =>
+                onChange={(event) =>
                   updateRoute(route.id, {
-                    priceJPY: Number(e.target.value) || 0,
+                    priceJPY: Number(event.target.value) || 0,
                   })
                 }
               />
             </label>
-
-            <div style={{ alignSelf: "end" }}>
-              <button className="btn" onClick={() => setEditingRoute(null)}>
-                Listo
-              </button>
-            </div>
+            <button className="btn" onClick={() => setEditingRoute(null)}>
+              Listo
+            </button>
           </div>
         )}
       </li>
@@ -375,10 +304,7 @@ export default function ItineraryList() {
                     mapX: (dayMaps[selectedDate]?.width || 1600) / 2,
                     mapY: (dayMaps[selectedDate]?.height || 1000) / 2,
                   }
-                : {
-                    lat: 35.6804,
-                    lng: 139.769,
-                  }),
+                : { lat: 35.6804, lng: 139.769 }),
               notes: "",
             })
           }
@@ -392,16 +318,15 @@ export default function ItineraryList() {
           <select
             className="input"
             value={selectedLooseId}
-            onChange={(e) => handleLoosePreview(e.target.value)}
+            onChange={(event) => handleLoosePreview(event.target.value)}
           >
             <option value="">Selecciona un lugar de My Places</option>
-            {pool.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
+            {pool.map((place) => (
+              <option key={place.id} value={place.id}>
+                {place.name}
               </option>
             ))}
           </select>
-
           <button
             className="btn-outline text-xs"
             disabled={!canAddLoose}
@@ -412,7 +337,6 @@ export default function ItineraryList() {
         </div>
       </div>
 
-      {/* Lista DnD (tal cual la tenías) */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -423,106 +347,107 @@ export default function ItineraryList() {
           strategy={verticalListSortingStrategy}
         >
           <ol className="list scroll-list">
-            {blocks.map((b) => {
-              if (b.kind === "place") {
-                const p = b.place;
-                return (
-                  <SortableItemWithHandle id={p.id} key={p.id}>
-                    {({ setNodeRef, style, handleProps }) => (
-                      <li
-                        ref={setNodeRef}
-                        style={{ ...style, listStyle: "none" }}
-                      >
-                        <div
-                          className={`item ${
-                            selectedId === p.id ? "active" : ""
-                          }`}
-                          onClick={() => {
-                            setSelected(p.id);
-                            setShowMap(Boolean(ui.showMap));
-                          }}
-                          onDoubleClick={() => {
-                            setSelected(p.id);
-                            setShowMap(false);
-                          }}
-                          style={{ cursor: "pointer" }}
-                        >
-                          <div className="itinerary-item-main">
-                            <div
-                              className="itinerary-item-title"
-                            >
-                              <div className="font-medium">
-                                {numFor(p.id)}. {p.name}
-                              </div>
-                              <CategoryBadge category={p.category} />
-                            </div>
-                            <div className="text-xs">
-                              {p.startTime ? `Inicio: ${p.startTime} · ` : ""}
-                              Estancia: {p.durationMin ?? 60} min
-                              {typeof p.spendJPY === "number"
-                                ? ` · Gasto: ¥${p.spendJPY} (${formatConvertedJPY(
-                                    p.spendJPY,
-                                    currency
-                                  )})`
-                                : ""}
-                            </div>
-                            {p.sourceUrl && (
-                              <a
-                                className="text-xs text-blue-600"
-                                href={p.sourceUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                Ver fuente
-                              </a>
-                            )}
-                          </div>
-
-                          <div className="itinerary-item-actions">
-                            <button
-                              className="btn-outline text-xs"
-                              title="Mover a My places"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                unassignPlace(p.id);
-                              }}
-                            >
-                              ↩ A My places
-                            </button>
-
-                            <div
-                              {...handleProps}
-                              role="button"
-                              aria-label="arrastrar"
-                              className="itinerary-handle"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <span>⋮⋮</span>
-                            </div>
-                          </div>
-                        </div>
-                      </li>
-                    )}
-                  </SortableItemWithHandle>
-                );
-              } else {
-                const { from, to, route } = b;
+            {blocks.map((block) => {
+              if (block.kind === "route") {
                 return (
                   <RouteLine
-                    key={route ? route.id : `missing-${from.id}-${to.id}`}
-                    from={from}
-                    to={to}
-                    route={route}
+                    key={
+                      block.route
+                        ? block.route.id
+                        : `missing-${block.from.id}-${block.to.id}`
+                    }
+                    from={block.from}
+                    to={block.to}
+                    route={block.route}
                   />
                 );
               }
+
+              const place = block.place;
+              return (
+                <SortableItemWithHandle id={place.id} key={place.id}>
+                  {({ setNodeRef, style, handleProps }) => (
+                    <li ref={setNodeRef} style={{ ...style, listStyle: "none" }}>
+                      <div
+                        className={`item ${
+                          selectedId === place.id ? "active" : ""
+                        }`}
+                        onClick={() => {
+                          setSelected(place.id);
+                          setShowMap(Boolean(ui.showMap));
+                        }}
+                        onDoubleClick={() => {
+                          setSelected(place.id);
+                          setShowMap(false);
+                        }}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <div className="itinerary-item-main">
+                          <div className="itinerary-item-title">
+                            <div className="font-medium">
+                              {numFor(place.id)}. {place.name}
+                            </div>
+                            <CategoryBadge category={place.category} />
+                          </div>
+                          <div className="text-xs">
+                            {place.startTime ? `Inicio: ${place.startTime} - ` : ""}
+                            Estancia: {place.durationMin ?? 60} min
+                            {typeof place.spendJPY === "number"
+                              ? ` - Gasto: JPY ${place.spendJPY} (${formatConvertedJPY(
+                                  place.spendJPY,
+                                  currency
+                                )})`
+                              : ""}
+                          </div>
+                          {place.sourceUrl && (
+                            <a
+                              className="text-xs text-blue-600"
+                              href={place.sourceUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              Ver fuente
+                            </a>
+                          )}
+                        </div>
+
+                        <div className="itinerary-item-actions">
+                          <button
+                            className="btn-outline text-xs"
+                            title="Mover a My Places"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              unassignPlace(place.id);
+                            }}
+                          >
+                            A My Places
+                          </button>
+                          <div
+                            {...handleProps}
+                            role="button"
+                            aria-label="Arrastrar"
+                            className="itinerary-handle"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <span>::</span>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  )}
+                </SortableItemWithHandle>
+              );
             })}
 
             {!blocks.length && (
-              <li className="item text-xs">
-                Sin puntos en este día. Haz click en el mapa o usa “Añadir
-                punto”.
+              <li className="empty-state empty-state--rich">
+                <div className="empty-state-kicker">Primer paso</div>
+                <div className="font-medium">Este día aún no tiene puntos</div>
+                <div className="text-xs">
+                  Añade un punto, haz click en el mapa o mueve una idea desde My
+                  Places.
+                </div>
               </li>
             )}
           </ol>

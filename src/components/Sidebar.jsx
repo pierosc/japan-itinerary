@@ -1,4 +1,4 @@
-// src/components/Sidebar.jsx
+import { useEffect } from "react";
 import ItineraryList from "./ItineraryList";
 import ImportExport from "./ImportExport";
 import DaySelector from "./day/DaySelector";
@@ -7,24 +7,33 @@ import MyPlacesPanel from "./MyPlacesPanel";
 import SettingsPanel from "./SettingsPanel";
 import UsersPanel from "./UsersPanel";
 import PackingListPanel from "./PackingListPanel";
+import TimelinePanel from "./TimelinePanel";
 import { useItineraryStore } from "../hooks/useItineraryStore";
 
 const NAV_ITEMS = [
-  { id: "itinerary", label: "Itinerario", short: "Plan", icon: "⌖" },
-  { id: "myplaces", label: "My places", short: "Places", icon: "☆" },
-  { id: "finance", label: "Gastos y finanzas", short: "Gastos", icon: "¥" },
-  { id: "packing", label: "Packing list", short: "Packing", icon: "□" },
+  { id: "itinerary", label: "Itinerario", short: "Plan", icon: "#" },
+  { id: "timeline", label: "Timeline", short: "Time", icon: "T" },
+  { id: "myplaces", label: "My places", short: "Places", icon: "*" },
+  { id: "finance", label: "Gastos y finanzas", short: "Gastos", icon: "JPY" },
+  { id: "packing", label: "Packing list", short: "Packing", icon: "[]" },
   { id: "users", label: "Users", short: "Users", icon: "@" },
-  { id: "settings", label: "Configuración", short: "Config", icon: "⚙" },
+  { id: "settings", label: "Configuración", short: "Config", icon: "..." },
 ];
 
 export default function Sidebar({ trip, currentUser, onUpdateTripMeta }) {
-  const ui = useItineraryStore((s) => s.ui);
-  const setSidebarTab = useItineraryStore((s) => s.setSidebarTab);
+  const ui = useItineraryStore((state) => state.ui);
+  const setSidebarTab = useItineraryStore((state) => state.setSidebarTab);
   const storageMode = ui.storageMode || "online";
+  const unassignedCount = useItineraryStore(
+    (state) => state.unassignedPlaces().length
+  );
+  const activeTab = NAV_ITEMS.some((item) => item.id === ui.sidebarTab)
+    ? ui.sidebarTab
+    : "itinerary";
 
-  // 👇 contador de "My places" (lugares sin date)
-  const unassignedCount = useItineraryStore((s) => s.unassignedPlaces().length);
+  useEffect(() => {
+    if (activeTab !== ui.sidebarTab) setSidebarTab(activeTab);
+  }, [activeTab, setSidebarTab, ui.sidebarTab]);
 
   return (
     <div className="sidebar-shell h-full w-full flex flex-col min-h-0">
@@ -37,8 +46,8 @@ export default function Sidebar({ trip, currentUser, onUpdateTripMeta }) {
       <div className="sidebar-nav">
         <select
           className="input sidebar-nav-select"
-          value={ui.sidebarTab}
-          onChange={(e) => setSidebarTab(e.target.value)}
+          value={activeTab}
+          onChange={(event) => setSidebarTab(event.target.value)}
           aria-label="Cambiar sección"
         >
           {NAV_ITEMS.map((item) => (
@@ -56,11 +65,11 @@ export default function Sidebar({ trip, currentUser, onUpdateTripMeta }) {
               key={item.id}
               className={
                 "sidebar-tab " +
-                (ui.sidebarTab === item.id ? "sidebar-tab--active" : "")
+                (activeTab === item.id ? "sidebar-tab--active" : "")
               }
               onClick={() => setSidebarTab(item.id)}
               role="tab"
-              aria-selected={ui.sidebarTab === item.id}
+              aria-selected={activeTab === item.id}
             >
               <span className="sidebar-tab-icon" aria-hidden="true">
                 {item.icon}
@@ -74,7 +83,7 @@ export default function Sidebar({ trip, currentUser, onUpdateTripMeta }) {
         </div>
       </div>
 
-      {ui.sidebarTab === "itinerary" && (
+      {activeTab === "itinerary" && (
         <div className="sidebar-pane">
           <section className="workspace-section">
             <DaySelector />
@@ -85,32 +94,41 @@ export default function Sidebar({ trip, currentUser, onUpdateTripMeta }) {
         </div>
       )}
 
-      {ui.sidebarTab === "myplaces" && (
+      {activeTab === "timeline" && (
+        <section className="workspace-section sidebar-scroll-pane">
+          <TimelinePanel />
+        </section>
+      )}
+
+      {activeTab === "myplaces" && (
         <section className="workspace-section sidebar-list-card">
           <MyPlacesPanel />
         </section>
       )}
 
-      {ui.sidebarTab === "finance" && (
+      {activeTab === "finance" && (
         <section className="workspace-section sidebar-scroll-pane">
           <FinancePanel trip={trip} currentUser={currentUser} />
         </section>
       )}
 
-      {ui.sidebarTab === "packing" && (
+      {activeTab === "packing" && (
         <section className="workspace-section sidebar-list-card">
           <PackingListPanel />
         </section>
       )}
 
-      {ui.sidebarTab === "users" && (
+      {activeTab === "users" && (
         <section className="workspace-section sidebar-list-card">
-          {/* OJO: UsersPanel ahora recibe trip (para id) */}
-          <UsersPanel trip={trip} currentUser={currentUser} />
+          <UsersPanel
+            trip={trip}
+            currentUser={currentUser}
+            onUpdateTripMeta={onUpdateTripMeta}
+          />
         </section>
       )}
 
-      {ui.sidebarTab === "settings" && (
+      {activeTab === "settings" && (
         <section className="workspace-section sidebar-scroll-pane">
           <SettingsPanel
             trip={trip}

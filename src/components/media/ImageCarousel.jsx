@@ -19,9 +19,9 @@ export default function ImageCarousel({ images = [], height = 320 }) {
   if (!has) {
     return (
       <div
-        className="card"
+        className="image-carousel-empty"
         style={{
-          height,
+          height: Math.min(height, 128),
           display: "flex",
           alignItems: "center",
           justifyContent: "center",

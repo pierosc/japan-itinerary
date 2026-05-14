@@ -4,7 +4,7 @@ import { useItineraryStore } from "../hooks/useItineraryStore";
 import ImageCarousel from "./media/ImageCarousel";
 import PlaceEditor from "./PlaceEditor";
 
-export default function SelectedPlaceView() {
+export default function SelectedPlaceView({ trip, currentUser }) {
   const { places, selectedId, setShowMap, setSelected } = useItineraryStore();
   const place = useMemo(
     () => places.find((p) => p.id === selectedId),
@@ -37,15 +37,15 @@ export default function SelectedPlaceView() {
       {/* Carrusel de imágenes grande */}
       <ImageCarousel
         images={(place.images || []).map((i) => ({
-          src: i.dataUrl || i.url,
+          src: i.url,
           alt: i.name,
         }))}
-        height={360}
+        height={260}
       />
 
       {/* Editor completo de configuraciones */}
       <div className="card mt-3">
-        <PlaceEditor place={place} />
+        <PlaceEditor place={place} trip={trip} currentUser={currentUser} />
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { useItineraryStore } from "../hooks/useItineraryStore";
 import MenuImageModal from "./MenuImageModal";
 import PlaceItemsEditor from "./PlaceItemsEditor";
 import { formatConvertedJPY } from "../utils/money";
+import { useFeedback } from "./ui/FeedbackProvider";
 
 const CATEGORIES = [
   "restaurante",
@@ -16,11 +17,22 @@ const CATEGORIES = [
   "otro",
 ];
 
-export default function PlaceEditor({ place }) {
+function imageNameFromUrl(url, fallback = "imagen") {
+  try {
+    const parsed = new URL(url);
+    const name = parsed.pathname.split("/").filter(Boolean).pop();
+    return decodeURIComponent(name || fallback);
+  } catch {
+    return fallback;
+  }
+}
+
+export default function PlaceEditor({ place, trip, currentUser }) {
+  const { toast, confirm } = useFeedback();
   const { updatePlace, removePlace, setSelected, currency } =
     useItineraryStore();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [imgUrl, setImgUrl] = useState(""); // para agregar imagen por URL
+  const [imgUrl, setImgUrl] = useState("");
 
   if (!place) return null;
 
@@ -31,340 +43,376 @@ export default function PlaceEditor({ place }) {
     const url = imgUrl.trim();
     if (!url) return;
 
-    // validación mínima
     if (!/^https?:\/\/.+/i.test(url)) {
-      alert("Pon una URL válida que empiece con http:// o https://");
+      toast({
+        title: "URL inválida",
+        message: "Debe empezar con http:// o https://.",
+        tone: "warning",
+      });
       return;
     }
 
     const current = place.images || [];
     updatePlace(place.id, {
-      images: [...current, { name: url.split("/").pop() || "imagen", url }],
+      images: [
+        ...current,
+        { name: imageNameFromUrl(url, `imagen ${current.length + 1}`), url },
+      ],
     });
     setImgUrl("");
   };
 
+  const updateImage = (index, patch) => {
+    const next = [...(place.images || [])];
+    const current = next[index] || {};
+    next[index] = {
+      ...current,
+      ...patch,
+      name:
+        patch.url && !patch.name
+          ? imageNameFromUrl(patch.url, current.name || `imagen ${index + 1}`)
+          : patch.name ?? current.name,
+    };
+    updatePlace(place.id, { images: next });
+  };
+
+  const removeImage = (index) => {
+    const next = [...(place.images || [])];
+    next.splice(index, 1);
+    updatePlace(place.id, { images: next });
+  };
+
   return (
     <>
-      <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        {/* Nombre */}
-        <label className="col-span-2">
-          <span className="text-xs">Nombre</span>
-          <input
-            className="input"
-            value={place.name || ""}
-            onChange={(e) => updatePlace(place.id, { name: e.target.value })}
-          />
-        </label>
-
-        {/* Categoría */}
-        <label>
-          <span className="text-xs">Categoría</span>
-          <select
-            className="input"
-            value={place.category || "otro"}
-            onChange={(e) =>
-              updatePlace(place.id, { category: e.target.value })
-            }
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {/* Fecha */}
-        <label>
-          <span className="text-xs">Fecha (día del itinerario)</span>
-          <input
-            type="date"
-            className="input"
-            value={place.date || ""}
-            onChange={(e) => updatePlace(place.id, { date: e.target.value })}
-          />
-        </label>
-
-        {/* Inicio y estancia */}
-        <label>
-          <span className="text-xs">Inicio (HH:mm)</span>
-          <input
-            className="input"
-            placeholder="09:00"
-            value={place.startTime || ""}
-            onChange={(e) =>
-              updatePlace(place.id, { startTime: e.target.value })
-            }
-          />
-        </label>
-        <label>
-          <span className="text-xs">Estancia (min)</span>
-          <input
-            type="number"
-            className="input"
-            value={place.durationMin ?? 60}
-            onChange={(e) =>
-              updatePlace(place.id, { durationMin: onNum(e.target.value, 60) })
-            }
-          />
-        </label>
-
-        {/* Costos */}
-        <label>
-          <span className="text-xs">Gasto (¥)</span>
-          <input
-            type="number"
-            className="input"
-            value={place.spendJPY ?? 0}
-            onChange={(e) =>
-              updatePlace(place.id, { spendJPY: onNum(e.target.value, 0) })
-            }
-          />
-          <span className="text-xs">
-            {formatConvertedJPY(place.spendJPY || 0, currency)}
-          </span>
-        </label>
-        <label>
-          <span className="text-xs">Rango de precio</span>
-          <input
-            className="input"
-            placeholder="gratis / ¥ / ¥¥ / ¥¥¥"
-            value={place.priceRange || ""}
-            onChange={(e) =>
-              updatePlace(place.id, { priceRange: e.target.value })
-            }
-          />
-        </label>
-
-        {/* Fuente */}
-        <label className="col-span-2">
-          <span className="text-xs">Fuente (URL)</span>
-          <input
-            className="input"
-            placeholder="https://..."
-            value={place.sourceUrl || ""}
-            onChange={(e) =>
-              updatePlace(place.id, { sourceUrl: e.target.value })
-            }
-          />
-        </label>
-
-        {/* Restaurante: URL imagen de menú + visor */}
-        {place.category === "restaurante" && (
-          <>
-            <label className="col-span-2">
-              <span className="text-xs">URL imagen del menú</span>
+      <div className="place-detail-form">
+        <section className="place-detail-section">
+          <div className="place-detail-section-title">Datos del punto</div>
+          <div className="place-detail-grid">
+            <label className="place-detail-field place-detail-field-wide">
+              <span className="text-xs">Nombre</span>
               <input
                 className="input"
-                placeholder="https://..."
-                value={place.menuImageUrl || ""}
+                value={place.name || ""}
                 onChange={(e) =>
-                  updatePlace(place.id, { menuImageUrl: e.target.value })
+                  updatePlace(place.id, { name: e.target.value })
                 }
               />
             </label>
-            <div className="col-span-2">
+
+            <label className="place-detail-field">
+              <span className="text-xs">Categoría</span>
+              <select
+                className="input"
+                value={place.category || "otro"}
+                onChange={(e) =>
+                  updatePlace(place.id, { category: e.target.value })
+                }
+              >
+                {CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="place-detail-field">
+              <span className="text-xs">Fecha</span>
+              <input
+                type="date"
+                className="input"
+                value={place.date || ""}
+                onChange={(e) =>
+                  updatePlace(place.id, { date: e.target.value })
+                }
+              />
+            </label>
+          </div>
+        </section>
+
+        <section className="place-detail-section">
+          <div className="place-detail-section-title">Horario y costo</div>
+          <div className="place-detail-grid">
+            <label className="place-detail-field">
+              <span className="text-xs">Inicio</span>
+              <input
+                className="input"
+                placeholder="09:00"
+                value={place.startTime || ""}
+                onChange={(e) =>
+                  updatePlace(place.id, { startTime: e.target.value })
+                }
+              />
+            </label>
+
+            <label className="place-detail-field">
+              <span className="text-xs">Estancia min</span>
+              <input
+                type="number"
+                className="input"
+                value={place.durationMin ?? 60}
+                onChange={(e) =>
+                  updatePlace(place.id, {
+                    durationMin: onNum(e.target.value, 60),
+                  })
+                }
+              />
+            </label>
+
+            <label className="place-detail-field">
+              <span className="text-xs">Gasto yen</span>
+              <input
+                type="number"
+                className="input"
+                value={place.spendJPY ?? 0}
+                onChange={(e) =>
+                  updatePlace(place.id, { spendJPY: onNum(e.target.value, 0) })
+                }
+              />
+              <span className="text-xs">
+                {formatConvertedJPY(place.spendJPY || 0, currency)}
+              </span>
+            </label>
+
+            <label className="place-detail-field">
+              <span className="text-xs">Rango de precio</span>
+              <input
+                className="input"
+                placeholder="gratis / yen / yen yen"
+                value={place.priceRange || ""}
+                onChange={(e) =>
+                  updatePlace(place.id, { priceRange: e.target.value })
+                }
+              />
+            </label>
+          </div>
+        </section>
+
+        <section className="place-detail-section">
+          <div className="place-detail-section-title">Ubicación</div>
+          <div className="place-detail-grid">
+            {place.mapMode === "image" ? (
+              <>
+                <label className="place-detail-field">
+                  <span className="text-xs">X en plano</span>
+                  <input
+                    type="number"
+                    step="1"
+                    className="input"
+                    value={Math.round(place.mapX ?? 0)}
+                    onChange={(e) =>
+                      updatePlace(place.id, {
+                        mapX: onNum(e.target.value, place.mapX),
+                      })
+                    }
+                  />
+                </label>
+                <label className="place-detail-field">
+                  <span className="text-xs">Y en plano</span>
+                  <input
+                    type="number"
+                    step="1"
+                    className="input"
+                    value={Math.round(place.mapY ?? 0)}
+                    onChange={(e) =>
+                      updatePlace(place.id, {
+                        mapY: onNum(e.target.value, place.mapY),
+                      })
+                    }
+                  />
+                </label>
+              </>
+            ) : (
+              <>
+                <label className="place-detail-field">
+                  <span className="text-xs">Lat</span>
+                  <input
+                    type="number"
+                    step="0.000001"
+                    className="input"
+                    value={place.lat ?? ""}
+                    onChange={(e) =>
+                      updatePlace(place.id, {
+                        lat: onNum(e.target.value, place.lat),
+                      })
+                    }
+                  />
+                </label>
+                <label className="place-detail-field">
+                  <span className="text-xs">Lng</span>
+                  <input
+                    type="number"
+                    step="0.000001"
+                    className="input"
+                    value={place.lng ?? ""}
+                    onChange={(e) =>
+                      updatePlace(place.id, {
+                        lng: onNum(e.target.value, place.lng),
+                      })
+                    }
+                  />
+                </label>
+              </>
+            )}
+
+            <label className="place-detail-field place-detail-field-wide">
+              <span className="text-xs">Fuente URL</span>
+              <input
+                className="input"
+                placeholder="https://..."
+                value={place.sourceUrl || ""}
+                onChange={(e) =>
+                  updatePlace(place.id, { sourceUrl: e.target.value })
+                }
+              />
+            </label>
+          </div>
+        </section>
+
+        {place.category === "restaurante" && (
+          <section className="place-detail-section">
+            <div className="place-detail-section-title">Menu</div>
+            <div className="place-url-action-row">
+              <label className="place-detail-field">
+                <span className="text-xs">URL imagen del menu</span>
+                <input
+                  className="input"
+                  placeholder="https://..."
+                  value={place.menuImageUrl || ""}
+                  onChange={(e) =>
+                    updatePlace(place.id, { menuImageUrl: e.target.value })
+                  }
+                />
+              </label>
               <button
-                className="btn"
+                className="btn-outline"
                 onClick={() => setMenuOpen(true)}
                 disabled={!place.menuImageUrl}
                 title={!place.menuImageUrl ? "Agrega primero una URL" : ""}
               >
-                Ver menú (imagen online)
+                Ver menu
               </button>
             </div>
-          </>
+          </section>
         )}
 
-        {place.mapMode === "image" ? (
-          <>
-            <label>
-              <span className="text-xs">X en plano</span>
-              <input
-                type="number"
-                step="1"
-                className="input"
-                value={Math.round(place.mapX ?? 0)}
-                onChange={(e) =>
-                  updatePlace(place.id, {
-                    mapX: onNum(e.target.value, place.mapX),
-                  })
-                }
-              />
-            </label>
-            <label>
-              <span className="text-xs">Y en plano</span>
-              <input
-                type="number"
-                step="1"
-                className="input"
-                value={Math.round(place.mapY ?? 0)}
-                onChange={(e) =>
-                  updatePlace(place.id, {
-                    mapY: onNum(e.target.value, place.mapY),
-                  })
-                }
-              />
-            </label>
-          </>
-        ) : (
-          <>
-            <label>
-              <span className="text-xs">Lat</span>
-              <input
-                type="number"
-                step="0.000001"
-                className="input"
-                value={place.lat ?? ""}
-                onChange={(e) =>
-                  updatePlace(place.id, {
-                    lat: onNum(e.target.value, place.lat),
-                  })
-                }
-              />
-            </label>
-            <label>
-              <span className="text-xs">Lng</span>
-              <input
-                type="number"
-                step="0.000001"
-                className="input"
-                value={place.lng ?? ""}
-                onChange={(e) =>
-                  updatePlace(place.id, {
-                    lng: onNum(e.target.value, place.lng),
-                  })
-                }
-              />
-            </label>
-          </>
-        )}
+        <section className="place-detail-section">
+          <div className="place-detail-section-title">Notas</div>
+          <label className="place-detail-field">
+            <textarea
+              className="input place-notes-input"
+              placeholder="Notas, reservas, horarios especiales..."
+              value={place.notes || ""}
+              onChange={(e) =>
+                updatePlace(place.id, { notes: e.target.value })
+              }
+            />
+          </label>
+        </section>
 
-        {/* Notas */}
-        <label className="col-span-2">
-          <span className="text-xs">Notas</span>
-          <textarea
-            className="input"
-            value={place.notes || ""}
-            onChange={(e) => updatePlace(place.id, { notes: e.target.value })}
-          />
-        </label>
+        <section className="place-detail-section">
+          <div className="place-detail-section-header">
+            <div className="place-detail-section-title">Imágenes por URL</div>
+            <span className="section-meta">
+              {(place.images || []).length} imágenes
+            </span>
+          </div>
 
-        {/* Imágenes del lugar: SOLO URL */}
-        <div className="col-span-2">
-          <span className="text-xs">Imágenes (solo URL)</span>
+          <div className="place-image-add-row">
+            <input
+              className="input"
+              placeholder="https://imagen.com/foto.jpg"
+              value={imgUrl}
+              onChange={(e) => setImgUrl(e.target.value)}
+            />
+            <button className="btn" onClick={addImageFromUrl}>
+              Agregar URL
+            </button>
+          </div>
 
-          <div
-            className="mt-1"
-            style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
-          >
-            {(place.images || []).map((img, i) => {
-              const src = img.url; // ✅ solo url
-              return (
-                <div
-                  key={i}
-                  className="card"
-                  style={{
-                    padding: 6,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  {src ? (
-                    <img
-                      src={src}
-                      alt={img.name || `img-${i}`}
-                      style={{ maxWidth: 140, borderRadius: 8 }}
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                      }}
-                    />
-                  ) : (
-                    <div className="text-xs" style={{ opacity: 0.7 }}>
-                      (sin imagen)
+          {(place.images || []).length === 0 ? (
+            <div className="empty-state text-xs">Sin imágenes aún.</div>
+          ) : (
+            <div className="place-image-list">
+              {(place.images || []).map((img, i) => {
+                const src = img.url || "";
+                return (
+                  <div key={`${src}-${i}`} className="place-image-row">
+                    <div className="place-image-preview">
+                      {src ? (
+                        <img
+                          src={src}
+                          alt={img.name || `imagen ${i + 1}`}
+                          onError={(e) => {
+                            e.currentTarget.style.opacity = "0.18";
+                          }}
+                        />
+                      ) : (
+                        <span className="text-xs">Sin imagen</span>
+                      )}
                     </div>
-                  )}
-                  <div
-                    className="text-xs"
-                    style={{ maxWidth: 140, textAlign: "center" }}
-                  >
-                    {img.name || `imagen ${i + 1}`}
+
+                    <div className="place-image-fields">
+                      <input
+                        className="input"
+                        value={src}
+                        placeholder="https://imagen.com/foto.jpg"
+                        onChange={(e) =>
+                          updateImage(i, { url: e.target.value })
+                        }
+                      />
+                    </div>
+
+                    <div className="place-image-actions">
+                      {src && (
+                        <a
+                          className="btn-outline"
+                          href={src}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Abrir
+                        </a>
+                      )}
+                      <button
+                        className="btn-outline"
+                        onClick={() => removeImage(i)}
+                      >
+                        Quitar
+                      </button>
+                    </div>
                   </div>
-
-                  {src && (
-                    <a
-                      className="text-xs text-blue-600"
-                      href={src}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Abrir URL
-                    </a>
-                  )}
-
-                  <button
-                    className="btn-outline"
-                    onClick={() => {
-                      const next = [...(place.images || [])];
-                      next.splice(i, 1);
-                      updatePlace(place.id, { images: next });
-                    }}
-                  >
-                    Quitar
-                  </button>
-                </div>
-              );
-            })}
-
-            {/* Agregar por URL */}
-            <div className="flex" style={{ gap: 8, alignItems: "center" }}>
-              <input
-                className="input"
-                placeholder="https://imagen.com/foto.jpg"
-                value={imgUrl}
-                onChange={(e) => setImgUrl(e.target.value)}
-                style={{ width: 260 }}
-              />
-              <button className="btn" onClick={addImageFromUrl}>
-                + Agregar URL
-              </button>
+                );
+              })}
             </div>
-          </div>
-
-          <div className="text-xs text-gray-600 mt-2">
-            Tip: usa URLs directas a imagen (terminan en .jpg/.png) o enlaces
-            que permitan hotlink. Si el servidor bloquea, no cargará.
-          </div>
-        </div>
+          )}
+        </section>
       </div>
 
-      {/* Editor de ítems (platos/compras) para restaurante/tienda/supermercado */}
       {["restaurante", "tienda", "supermercado"].includes(place.category) && (
-        <PlaceItemsEditor place={place} />
+        <PlaceItemsEditor place={place} trip={trip} currentUser={currentUser} />
       )}
 
-      {/* Acciones comunes */}
-      <div
-        className="mt-2"
-        style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
-      >
+      <div className="place-danger-zone">
         <button
           className="btn-outline"
-          onClick={() => {
-            if (confirm("¿Eliminar este punto?")) {
+          onClick={async () => {
+            const accepted = await confirm({
+              title: "Eliminar punto",
+              message: "Se quitará del itinerario, rutas incluidas.",
+              confirmLabel: "Eliminar punto",
+              tone: "danger",
+            });
+            if (accepted) {
               removePlace(place.id);
               setSelected(null);
             }
           }}
         >
-          Eliminar
+          Eliminar punto
         </button>
       </div>
 
-      {/* Modal de imagen de menú */}
       {menuOpen && place.menuImageUrl && (
         <MenuImageModal
           url={place.menuImageUrl}

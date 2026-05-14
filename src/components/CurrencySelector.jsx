@@ -17,9 +17,10 @@ export default function CurrencySelector({ compact = false }) {
   return (
     <div className={compact ? "currency-selector compact" : "currency-selector"}>
       <label className="currency-selector-field">
-        <span className="text-xs">Moneda</span>
+        {!compact && <span className="text-xs">Moneda</span>}
         <select
           className="input"
+          aria-label="Moneda"
           value={currency.code}
           onChange={(e) => handleCurrencyChange(e.target.value)}
         >

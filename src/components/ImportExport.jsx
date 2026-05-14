@@ -1,7 +1,9 @@
 import { useItineraryStore } from "../hooks/useItineraryStore";
+import { useFeedback } from "./ui/FeedbackProvider";
 
 export default function ImportExport() {
   const { exportJSON, importJSON, clearAll } = useItineraryStore();
+  const { toast, confirm } = useFeedback();
 
   const handleExport = () => {
     const blob = new Blob([exportJSON()], { type: "application/json" });
@@ -20,11 +22,27 @@ export default function ImportExport() {
     const txt = await file.text();
     try {
       importJSON(txt);
-      alert("Itinerario cargado.");
+      toast({ title: "Itinerario importado", tone: "success" });
     } catch (err) {
-      alert("Error al importar: " + err.message);
+      toast({
+        title: "No se pudo importar",
+        message: err.message,
+        tone: "danger",
+      });
     }
     e.target.value = "";
+  };
+
+  const handleClear = async () => {
+    const accepted = await confirm({
+      title: "Vaciar viaje local",
+      message: "Esto borra el itinerario cargado en esta sesión.",
+      confirmLabel: "Vaciar",
+      tone: "danger",
+    });
+    if (!accepted) return;
+    clearAll();
+    toast({ title: "Viaje vaciado", tone: "success" });
   };
 
   return (
@@ -41,7 +59,7 @@ export default function ImportExport() {
       <button className="btn-outline" onClick={handleExport}>
         Exportar JSON
       </button>
-      <button className="btn-outline" onClick={clearAll}>
+      <button className="btn-outline" onClick={handleClear}>
         Vaciar
       </button>
     </div>

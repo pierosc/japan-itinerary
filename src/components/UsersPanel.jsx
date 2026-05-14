@@ -1,8 +1,12 @@
-// src/components/UsersPanel.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "./lib/supabaseClient";
+import {
+  fetchProfilesByIds,
+  searchProfiles,
+  updateTripSharing,
+} from "./services/userService";
 
-export default function UsersPanel({ trip, currentUser }) {
+export default function UsersPanel({ trip, currentUser, onUpdateTripMeta }) {
   const tripId = trip?.id;
   const user = currentUser;
   const ownerUserId = trip?.ownerUserId || null;
@@ -11,59 +15,43 @@ export default function UsersPanel({ trip, currentUser }) {
   const [sharedUserIds, setSharedUserIds] = useState([]);
   const [sharedProfiles, setSharedProfiles] = useState([]);
   const [ownerProfile, setOwnerProfile] = useState(null);
-
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const canUseSupabase = !!supabase && !!user?.id && !!tripId;
+  const currentUserProfile = useMemo(
+    () =>
+      user?.id
+        ? {
+            user_id: user.id,
+            email: user.primaryEmailAddress?.emailAddress || "",
+            full_name: user.fullName || user.username || "",
+            avatar_url: user.imageUrl || "",
+          }
+        : null,
+    [user]
+  );
+
   const ownerLabel =
     ownerProfile?.full_name ||
     ownerProfile?.email ||
     (ownerUserId
       ? ownerUserId === user?.id
-        ? "Tú"
+        ? currentUserProfile?.full_name || currentUserProfile?.email || "Tu"
         : ownerUserId
-      : "Invitado / sin dueño online");
-
-  // Cargar shared_with_user_ids del viaje
-  useEffect(() => {
-    if (!canUseSupabase) return;
-
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    (async () => {
-      try {
-        const { data, error } = await supabase
-          .from("trip_data")
-          .select("shared_with_user_ids")
-          .eq("trip_id", tripId)
-          .maybeSingle();
-
-        if (error) throw error;
-
-        const ids = (data?.shared_with_user_ids || []).filter(
-          (id) => id && id !== ownerUserId
-        );
-        if (!cancelled) setSharedUserIds(ids);
-      } catch {
-        if (!cancelled) setError("No se pudo cargar usuarios compartidos.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [canUseSupabase, ownerUserId, tripId, user?.id]);
+      : "Invitado / sin dueno online");
 
   useEffect(() => {
-    if (!supabase || !ownerUserId) {
+    const ids = (trip?.sharedWithUserIds || []).filter(
+      (id) => id && id !== ownerUserId
+    );
+    setSharedUserIds(ids);
+  }, [ownerUserId, trip?.sharedWithUserIds]);
+
+  useEffect(() => {
+    if (!canUseSupabase || !ownerUserId) {
       setOwnerProfile(null);
       return;
     }
@@ -71,26 +59,21 @@ export default function UsersPanel({ trip, currentUser }) {
     let cancelled = false;
 
     (async () => {
-      try {
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("user_id, email, full_name, avatar_url")
-          .eq("user_id", ownerUserId)
-          .maybeSingle();
-
-        if (error) throw error;
-        if (!cancelled) setOwnerProfile(data || null);
-      } catch {
-        if (!cancelled) setOwnerProfile(null);
+      if (ownerUserId === user?.id && currentUserProfile) {
+        setOwnerProfile(currentUserProfile);
+        return;
       }
+
+      const result = await fetchProfilesByIds([ownerUserId]);
+      if (cancelled) return;
+      setOwnerProfile(result.ok ? result.profiles?.[0] || null : null);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [ownerUserId]);
+  }, [canUseSupabase, currentUserProfile, ownerUserId, user?.id]);
 
-  // Resolver perfiles para mostrar nombres/emails
   useEffect(() => {
     if (!canUseSupabase) return;
     if (!sharedUserIds.length) {
@@ -101,31 +84,22 @@ export default function UsersPanel({ trip, currentUser }) {
     let cancelled = false;
 
     (async () => {
-      try {
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("user_id, email, full_name, avatar_url")
-          .in("user_id", sharedUserIds);
-
-        if (error) throw error;
-        if (!cancelled) setSharedProfiles(data || []);
-      } catch {
-        if (!cancelled) setSharedProfiles([]);
-      }
+      const result = await fetchProfilesByIds(sharedUserIds);
+      if (cancelled) return;
+      setSharedProfiles(result.ok ? result.profiles || [] : []);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [canUseSupabase, sharedUserIds, tripId]);
+  }, [canUseSupabase, sharedUserIds]);
 
-  // Buscar en profiles (email / nombre)
   useEffect(() => {
-    if (!canUseSupabase) return;
-    if (!isOwner) {
+    if (!canUseSupabase || !isOwner) {
       setResults([]);
       return;
     }
+
     const term = q.trim();
     if (term.length < 2) {
       setResults([]);
@@ -135,81 +109,67 @@ export default function UsersPanel({ trip, currentUser }) {
     let cancelled = false;
 
     (async () => {
-      try {
-        // búsqueda simple: email ilike OR full_name ilike
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("user_id, email, full_name, avatar_url")
-          .or(`email.ilike.%${term}%,full_name.ilike.%${term}%`)
-          .limit(8);
+      const result = await searchProfiles(term);
+      if (cancelled) return;
 
-        if (error) throw error;
-
-        // no te muestres a ti misma y no repitas ya compartidos
-        const filtered = (data || []).filter(
-          (p) => p.user_id !== user.id && !sharedUserIds.includes(p.user_id)
-        );
-
-        if (!cancelled) setResults(filtered);
-      } catch {
-        if (!cancelled) setResults([]);
-      }
+      const filtered = result.ok
+        ? (result.profiles || []).filter(
+            (profile) =>
+              profile.user_id !== user.id &&
+              !sharedUserIds.includes(profile.user_id)
+          )
+        : [];
+      setResults(filtered);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [canUseSupabase, isOwner, q, user?.id, sharedUserIds]);
+  }, [canUseSupabase, isOwner, q, sharedUserIds, user?.id]);
 
   const updateShared = async (nextIds) => {
     if (!canUseSupabase) return;
     if (!isOwner) {
-      setError("Solo el dueño del viaje puede cambiar usuarios.");
+      setError("Solo el dueno del viaje puede cambiar usuarios.");
       return;
     }
+
     const sanitizedIds = [...new Set(nextIds)].filter(
       (id) => id && id !== ownerUserId
     );
+
     setLoading(true);
     setError(null);
 
-    try {
-      const { error } = await supabase
-        .from("trip_data")
-        .update({ shared_with_user_ids: sanitizedIds })
-        .eq("trip_id", tripId)
-        .eq("user_id", ownerUserId);
+    const result = await updateTripSharing(tripId, sanitizedIds);
 
-      if (error) throw error;
+    if (result.ok) {
       setSharedUserIds(sanitizedIds);
+      onUpdateTripMeta?.({ sharedWithUserIds: sanitizedIds });
       setQ("");
       setResults([]);
-    } catch {
-      setError("Error actualizando el sharing.");
-    } finally {
-      setLoading(false);
+    } else {
+      setError(result.error?.message || "Error actualizando el sharing.");
     }
+
+    setLoading(false);
   };
 
   const handleAddUser = async (profile) => {
     if (!isOwner || profile.user_id === ownerUserId) return;
-    const next = [...sharedUserIds, profile.user_id];
-    await updateShared(next);
+    await updateShared([...sharedUserIds, profile.user_id]);
   };
 
   const handleRemoveUser = async (userIdToRemove) => {
     if (!isOwner || userIdToRemove === ownerUserId) return;
-    const next = sharedUserIds.filter((id) => id !== userIdToRemove);
-    await updateShared(next);
+    await updateShared(sharedUserIds.filter((id) => id !== userIdToRemove));
   };
 
   const sharedList = useMemo(() => {
-    // asegura orden estable según sharedUserIds
-    const map = new Map(sharedProfiles.map((p) => [p.user_id, p]));
+    const map = new Map(sharedProfiles.map((profile) => [profile.user_id, profile]));
     return sharedUserIds
       .map((id) => map.get(id) || { user_id: id, email: id, full_name: "" })
-      .filter((p) => p.user_id !== ownerUserId)
-      .filter(Boolean);
+      .filter((profile) => profile.user_id !== ownerUserId);
   }, [ownerUserId, sharedProfiles, sharedUserIds]);
 
   if (!tripId) {
@@ -226,42 +186,40 @@ export default function UsersPanel({ trip, currentUser }) {
       <h2 className="font-semibold mb-2">Users</h2>
 
       <div className="item">
-        <div className="text-xs">Dueño del viaje</div>
+        <div className="text-xs">Dueno del viaje</div>
         <div className="font-medium">{ownerLabel}</div>
         <div className="text-xs">
           {isOwner
-            ? "Tú puedes agregar o quitar usuarios."
-            : "Solo el dueño puede quitar usuarios o cambiar el sharing."}
+            ? "Tu puedes agregar o quitar usuarios."
+            : "Solo el dueno puede quitar usuarios o cambiar el sharing."}
         </div>
       </div>
 
       {!supabase ? (
-        <div className="text-xs text-gray-600">
-          Supabase no está configurado.
-        </div>
+        <div className="text-xs text-gray-600">Supabase no esta configurado.</div>
       ) : !user?.id ? (
         <div className="text-xs text-gray-600">
-          Inicia sesión para compartir viajes.
+          Inicia sesion para compartir viajes.
         </div>
       ) : (
         <>
           <div className="text-xs text-gray-600 mb-2">
-            Busca usuarios registrados (desde <code>profiles</code>) y
-            compártelos para que puedan editar el mismo viaje.
+            Busca usuarios registrados y compartelos para que puedan editar el
+            mismo viaje.
           </div>
 
           {!isOwner && ownerUserId && (
             <div className="text-xs text-gray-600 mb-2">
               Este viaje pertenece a otro usuario. Puedes editar el itinerario
-              compartido, pero solo el dueño puede cambiar usuarios.
+              compartido, pero solo el dueno puede cambiar usuarios.
             </div>
           )}
 
           <input
             className="input mb-2"
-            placeholder="Buscar por email o nombre…"
+            placeholder="Buscar por email o nombre..."
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(event) => setQ(event.target.value)}
             disabled={!isOwner}
           />
 
@@ -269,9 +227,9 @@ export default function UsersPanel({ trip, currentUser }) {
             <div className="card" style={{ padding: 10, marginBottom: 10 }}>
               <div className="text-xs mb-2">Resultados</div>
               <ul className="list scroll-list" style={{ maxHeight: 180 }}>
-                {results.map((p) => (
+                {results.map((profile) => (
                   <li
-                    key={p.user_id}
+                    key={profile.user_id}
                     className="item"
                     style={{ cursor: "default" }}
                   >
@@ -284,13 +242,13 @@ export default function UsersPanel({ trip, currentUser }) {
                             textOverflow: "ellipsis",
                           }}
                         >
-                          {p.full_name || p.email || p.user_id}
+                          {profile.full_name || profile.email || profile.user_id}
                         </div>
-                        <div className="text-xs">{p.email}</div>
+                        <div className="text-xs">{profile.email}</div>
                       </div>
                       <button
                         className="btn-outline text-xs"
-                        onClick={() => handleAddUser(p)}
+                        onClick={() => handleAddUser(profile)}
                         disabled={loading || !isOwner}
                       >
                         Compartir
@@ -311,26 +269,28 @@ export default function UsersPanel({ trip, currentUser }) {
             </div>
 
             {loading ? (
-              <div className="text-xs">Cargando…</div>
+              <div className="text-xs">Cargando...</div>
             ) : sharedList.length === 0 ? (
               <div className="text-xs text-gray-600">
-                Aún no has compartido este viaje con nadie.
+                Aun no has compartido este viaje con nadie.
               </div>
             ) : (
               <ul className="list scroll-list">
-                {sharedList.map((p) => (
-                  <li key={p.user_id} className="item">
+                {sharedList.map((profile) => (
+                  <li key={profile.user_id} className="item">
                     <div className="flex justify-between items-center gap-2">
                       <div style={{ minWidth: 0 }}>
                         <div className="font-medium">
-                          {p.full_name || p.email || p.user_id}
+                          {profile.full_name || profile.email || profile.user_id}
                         </div>
-                        {p.email && <div className="text-xs">{p.email}</div>}
+                        {profile.email && (
+                          <div className="text-xs">{profile.email}</div>
+                        )}
                       </div>
                       {isOwner && (
                         <button
                           className="btn-outline text-xs"
-                          onClick={() => handleRemoveUser(p.user_id)}
+                          onClick={() => handleRemoveUser(profile.user_id)}
                           disabled={loading}
                         >
                           Quitar

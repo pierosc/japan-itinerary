@@ -1,6 +1,7 @@
 // src/components/PlannerAppBar.jsx
 import { UserButton } from "@clerk/clerk-react";
 import CurrencySelector from "./CurrencySelector";
+import PdfExportButton from "./PdfExportButton";
 
 export default function PlannerAppBar({
   trip,
@@ -49,6 +50,8 @@ export default function PlannerAppBar({
             {saving ? "Guardando..." : "Guardar ahora"}
           </button>
         )}
+
+        <PdfExportButton trip={trip} />
 
         {hasClerk && isSignedIn && (
           <UserButton

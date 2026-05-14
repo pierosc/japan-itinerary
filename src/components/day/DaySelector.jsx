@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useItineraryStore } from "../../hooks/useItineraryStore";
 import { formatConvertedJPY } from "../../utils/money";
+import { useFeedback } from "../ui/FeedbackProvider";
 
 function CalendarDialog({
   open,
@@ -30,7 +31,7 @@ function CalendarDialog({
         <div className="section-heading">
           <h2 className="font-semibold">{title}</h2>
           <button className="icon-button" onClick={onClose} title="Cerrar">
-            ×
+            x
           </button>
         </div>
 
@@ -60,8 +61,11 @@ function CalendarDialog({
 }
 
 export default function DaySelector() {
+  const { confirm } = useFeedback();
   const {
     days,
+    places,
+    dayTitles,
     selectedDate,
     setSelectedDate,
     addDay,
@@ -70,11 +74,24 @@ export default function DaySelector() {
     totalJPYForDate,
     totalExpenseJPYForDate,
     currency,
+    setDayTitle,
   } = useItineraryStore();
   const [dialog, setDialog] = useState(null);
 
   const selectedTotal =
     totalJPYForDate(selectedDate) + totalExpenseJPYForDate(selectedDate);
+
+  const dayDisplayTitle = (date) => {
+    const manual = (dayTitles?.[date] || "").trim();
+    if (manual) return manual;
+
+    const dayPlaces = places.filter((p) => p.date === date);
+    if (dayPlaces.length === 1 && dayPlaces[0]?.name?.trim()) {
+      return dayPlaces[0].name.trim();
+    }
+
+    return `Día ${Math.max(1, days.indexOf(date) + 1)}`;
+  };
 
   const closeDialog = () => setDialog(null);
 
@@ -88,15 +105,16 @@ export default function DaySelector() {
     closeDialog();
   };
 
-  const handleRemoveDay = () => {
+  const handleRemoveDay = async () => {
     if (days.length <= 1) return;
-    if (
-      confirm(
-        "¿Eliminar este día? Sus lugares se moverán a My Places y sus rutas del día se quitarán."
-      )
-    ) {
-      removeDay(selectedDate);
-    }
+    const accepted = await confirm({
+      title: "Eliminar día",
+      message:
+        "Sus lugares volverán a My Places y las rutas de ese día se quitarán.",
+      confirmLabel: "Eliminar día",
+      tone: "danger",
+    });
+    if (accepted) removeDay(selectedDate);
   };
 
   return (
@@ -107,7 +125,7 @@ export default function DaySelector() {
           <div className="text-xs">
             {days.length} día/s
             {selectedTotal
-              ? ` · ¥${selectedTotal} (${formatConvertedJPY(
+              ? ` - JPY ${selectedTotal} (${formatConvertedJPY(
                   selectedTotal,
                   currency
                 )})`
@@ -123,13 +141,12 @@ export default function DaySelector() {
         >
           {days.map((d) => {
             const total = totalJPYForDate(d) + totalExpenseJPYForDate(d);
+            const totalLabel = total
+              ? ` - JPY ${total} (${formatConvertedJPY(total, currency)})`
+              : "";
             return (
               <option key={d} value={d}>
-                {`${d}${
-                  total
-                    ? ` · ¥${total} (${formatConvertedJPY(total, currency)})`
-                    : ""
-                }`}
+                {`${dayDisplayTitle(d)} - ${d}${totalLabel}`}
               </option>
             );
           })}
@@ -150,7 +167,7 @@ export default function DaySelector() {
             title="Cambiar fecha"
             aria-label="Cambiar fecha"
           >
-            ◷
+            o
           </button>
           <button
             className="icon-button icon-button-danger"
@@ -159,10 +176,20 @@ export default function DaySelector() {
             title="Eliminar día"
             aria-label="Eliminar día"
           >
-            ×
+            x
           </button>
         </div>
       </div>
+
+      <label className="day-title-field">
+        <span className="text-xs">Título del día</span>
+        <input
+          className="input"
+          value={dayTitles?.[selectedDate] || ""}
+          placeholder={dayDisplayTitle(selectedDate)}
+          onChange={(e) => setDayTitle(selectedDate, e.target.value)}
+        />
+      </label>
 
       <CalendarDialog
         open={dialog === "create"}

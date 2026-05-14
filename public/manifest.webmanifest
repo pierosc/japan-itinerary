@@ -1,0 +1,17 @@
+{
+  "name": "dibu trip planner",
+  "short_name": "dibu trip",
+  "description": "Planner colaborativo para viajes con mapa, gastos, timeline y PDF.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0f14",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

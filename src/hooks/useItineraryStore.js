@@ -42,6 +42,7 @@ export const useItineraryStore = create((set, get) => ({
   routes: [],
   expenses: [],
   dayMaps: {},
+  dayTitles: {},
 
   days: [D0],
   selectedDate: D0,
@@ -129,17 +130,20 @@ export const useItineraryStore = create((set, get) => ({
   },
 
   removeDay: (date) => {
-    const { days, places, routes, expenses, dayMaps } = get();
+    const { days, places, routes, expenses, dayMaps, dayTitles } = get();
     const remaining = days.filter((d) => d !== date);
     const fallbackDate = remaining.length ? remaining[0] : todayISO();
     const nextDayMaps = { ...dayMaps };
+    const nextDayTitles = { ...dayTitles };
     delete nextDayMaps[date];
+    delete nextDayTitles[date];
     set({
       days: remaining.length ? remaining : [fallbackDate],
       places: places.map((p) => (p.date === date ? { ...p, date: null } : p)),
       routes: routes.filter((r) => r.date !== date),
       expenses: expenses.filter((e) => e.date !== date),
       dayMaps: nextDayMaps,
+      dayTitles: nextDayTitles,
       selectedDate: fallbackDate,
       selectedId: null,
     });
@@ -150,6 +154,12 @@ export const useItineraryStore = create((set, get) => ({
       if (!fromDate || !toDate || fromDate === toDate) return {};
       const days = s.days.map((d) => (d === fromDate ? toDate : d));
       const uniqueDays = [...new Set(days)].sort();
+
+      const dayTitles = { ...(s.dayTitles || {}) };
+      if (dayTitles[fromDate]) {
+        dayTitles[toDate] = dayTitles[fromDate];
+        delete dayTitles[fromDate];
+      }
 
       return {
         days: uniqueDays.length ? uniqueDays : [todayISO()],
@@ -169,8 +179,17 @@ export const useItineraryStore = create((set, get) => ({
             map,
           ])
         ),
+        dayTitles,
       };
     }),
+
+  setDayTitle: (date, title) =>
+    set((s) => ({
+      dayTitles: {
+        ...(s.dayTitles || {}),
+        [date]: title,
+      },
+    })),
 
   setDayMap: (date, map) =>
     set((s) => ({
@@ -434,6 +453,7 @@ export const useItineraryStore = create((set, get) => ({
       routes: [],
       expenses: [],
       dayMaps: {},
+      dayTitles: {},
       selectedId: null,
       days: [todayISO()],
       selectedDate: todayISO(),
@@ -447,6 +467,7 @@ export const useItineraryStore = create((set, get) => ({
       routes,
       expenses,
       dayMaps,
+      dayTitles,
       days,
       selectedDate,
       currency,
@@ -466,6 +487,7 @@ export const useItineraryStore = create((set, get) => ({
         routes,
         expenses,
         dayMaps,
+        dayTitles,
         packingItems,
         collaborators,
       },
@@ -504,6 +526,7 @@ export const useItineraryStore = create((set, get) => ({
         ...e,
       })),
       dayMaps: data.dayMaps || {},
+      dayTitles: data.dayTitles || {},
       selectedId: null,
       days: days.length ? days : [todayISO()],
       selectedDate: data.selectedDate ?? days[0] ?? todayISO(),

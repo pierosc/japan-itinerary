@@ -1,6 +1,24 @@
-// src/components/LandingPage.jsx
 import { useState } from "react";
 import TripCard from "./TripCard";
+
+const ONBOARDING_STEPS = [
+  {
+    title: "Crea tu primer viaje",
+    text: "Define destino, portada y empieza con un día base.",
+  },
+  {
+    title: "Importa desde Google Maps",
+    text: "Pega links como fuente en cada lugar para conservar contexto.",
+  },
+  {
+    title: "Invita amigos",
+    text: "Comparte el viaje y coordina lugares, gastos y pendientes.",
+  },
+  {
+    title: "Exporta PDF",
+    text: "Genera un travel book para llevarlo offline durante el viaje.",
+  },
+];
 
 function NewTripDialog({ open, onClose, onCreate }) {
   const [title, setTitle] = useState("");
@@ -9,8 +27,8 @@ function NewTripDialog({ open, onClose, onCreate }) {
 
   if (!open) return null;
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleSubmit = (event) => {
+    event.preventDefault();
     onCreate({
       title: title.trim() || "Sin título",
       destination: destination.trim() || "Japan",
@@ -22,26 +40,21 @@ function NewTripDialog({ open, onClose, onCreate }) {
   };
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(15,23,42,0.65)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 40,
-      }}
-    >
+    <div className="dialog-backdrop" role="presentation" onClick={onClose}>
       <div
-        className="panel"
-        style={{ maxWidth: 480, width: "100%", padding: 20 }}
+        className="dialog-card landing-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Crear nuevo viaje"
+        onClick={(event) => event.stopPropagation()}
       >
-        <h2 style={{ marginBottom: 12 }}>Crear nuevo viaje</h2>
-        <p className="text-xs" style={{ marginBottom: 12 }}>
-          Define un título, el destino y opcionalmente una imagen que usaremos
-          en la tarjeta y en el encabezado del planner.
-        </p>
+        <div>
+          <h2>Crear nuevo viaje</h2>
+          <p className="text-xs">
+            Define un título, el destino y opcionalmente una imagen para la
+            tarjeta del viaje.
+          </p>
+        </div>
 
         <form onSubmit={handleSubmit} className="landing-new-trip-form">
           <label>
@@ -50,7 +63,8 @@ function NewTripDialog({ open, onClose, onCreate }) {
               className="input"
               placeholder="Ej. Japón 2026 con amigos"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(event) => setTitle(event.target.value)}
+              autoFocus
             />
           </label>
 
@@ -60,21 +74,18 @@ function NewTripDialog({ open, onClose, onCreate }) {
               className="input"
               placeholder="Japan"
               value={destination}
-              onChange={(e) => setDestination(e.target.value)}
+              onChange={(event) => setDestination(event.target.value)}
             />
           </label>
 
-          <label style={{ gridColumn: "span 2" }}>
-            <span className="text-xs">URL de imagen (opcional)</span>
+          <label className="landing-field-wide">
+            <span className="text-xs">URL de imagen</span>
             <input
               className="input"
               placeholder="https://..."
               value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
+              onChange={(event) => setImageUrl(event.target.value)}
             />
-            <span className="text-xs">
-              Puede ser una foto de Unsplash, tu blog, etc.
-            </span>
           </label>
 
           <div className="landing-new-trip-actions">
@@ -86,6 +97,36 @@ function NewTripDialog({ open, onClose, onCreate }) {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function OnboardingPanel({ onCreate }) {
+  return (
+    <div className="onboarding-panel">
+      <div className="onboarding-copy">
+        <div className="empty-state-kicker">Empieza aquí</div>
+        <h2>Tu workspace de viaje está listo</h2>
+        <p className="text-xs">
+          Crea un viaje y construye el plan con mapa, presupuesto, checklist y
+          colaboradores desde el primer día.
+        </p>
+        <button className="btn" onClick={onCreate}>
+          Crear primer viaje
+        </button>
+      </div>
+
+      <div className="onboarding-steps">
+        {ONBOARDING_STEPS.map((step, index) => (
+          <div key={step.title} className="onboarding-step">
+            <span className="onboarding-step-number">{index + 1}</span>
+            <div>
+              <div className="font-medium">{step.title}</div>
+              <div className="text-xs">{step.text}</div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -111,9 +152,7 @@ export default function LandingPage({
         <div>
           <div className="landing-title">dibu trip planner</div>
           <div className="landing-subtitle">
-            Organiza tus viajes con días, lugares, gastos y packing list. Tus
-            viajes se guardan en tu cuenta para que puedas retomarlos cuando
-            quieras.
+            Organiza viajes con días, lugares, gastos, checklist y colaboración.
           </div>
         </div>
 
@@ -127,29 +166,27 @@ export default function LandingPage({
 
       <div className="landing-trips-section">
         {error ? (
-          <div className="panel" style={{ padding: 16, marginTop: 12 }}>
-            <div className="font-semibold">Error</div>
+          <div className="empty-state empty-state--rich">
+            <div className="empty-state-kicker">No pudimos cargar</div>
+            <div className="font-semibold">Error al traer tus viajes</div>
             <div className="text-xs">{error}</div>
           </div>
         ) : loading ? (
-          <div className="panel" style={{ padding: 16, marginTop: 12 }}>
-            <div className="text-xs text-gray-600">
-              Cargando tus viajes desde la nube...
-            </div>
+          <div className="trips-grid" style={{ marginTop: 12 }}>
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="trip-card trip-card--skeleton" />
+            ))}
           </div>
         ) : trips.length === 0 ? (
-          <div className="panel" style={{ padding: 20, marginTop: 12 }}>
-            <h3 className="font-semibold">Aún no tienes viajes</h3>
-            <p className="text-xs">
-              Haz clic en <strong>“Nuevo viaje”</strong> para crear el primero.
-              Podrás añadir días, lugares, gastos y una lista de cosas para
-              llevar.
-            </p>
-          </div>
+          <OnboardingPanel onCreate={() => setDialogOpen(true)} />
         ) : (
           <div className="trips-grid" style={{ marginTop: 12 }}>
-            {trips.map((t) => (
-              <TripCard key={t.id} trip={t} onClick={() => onEnterTrip(t.id)} />
+            {trips.map((trip) => (
+              <TripCard
+                key={trip.id}
+                trip={trip}
+                onClick={() => onEnterTrip(trip.id)}
+              />
             ))}
           </div>
         )}

@@ -1,8 +1,9 @@
-// src/components/MyPlacesPanel.jsx
 import { useItineraryStore } from "../hooks/useItineraryStore";
 import CategoryBadge from "./CategoryBadge";
+import { useFeedback } from "./ui/FeedbackProvider";
 
 export default function MyPlacesPanel() {
+  const { toast } = useFeedback();
   const {
     unassignedPlaces,
     addUnassignedPlace,
@@ -33,13 +34,19 @@ export default function MyPlacesPanel() {
 
   const handleAssignToCurrentDay = (placeId) => {
     if (!selectedDate) {
-      alert("Primero selecciona un día en la pestaña Itinerario.");
+      toast({
+        title: "Selecciona un día",
+        message: "Elige un día en Itinerario antes de mover lugares.",
+        tone: "warning",
+      });
       return;
     }
+
     assignPlaceToDay(placeId, selectedDate);
     setSelectedDate(selectedDate);
     setSelected(placeId);
     setShowMap(false);
+    toast({ title: "Lugar enviado al día", tone: "success" });
   };
 
   return (
@@ -47,9 +54,7 @@ export default function MyPlacesPanel() {
       <div className="section-heading">
         <div>
           <h2 className="font-semibold">My places</h2>
-          <div className="text-xs">
-            {pool.length} lugar/es sin día asignado
-          </div>
+          <div className="text-xs">{pool.length} lugar/es sin día asignado</div>
         </div>
         <button className="btn" onClick={handleAdd}>
           + Añadir lugar
@@ -57,12 +62,16 @@ export default function MyPlacesPanel() {
       </div>
 
       {!pool.length ? (
-        <div className="empty-state">
+        <div className="empty-state empty-state--rich">
+          <div className="empty-state-kicker">Ideas pendientes</div>
           <div className="font-medium">No tienes lugares sueltos</div>
           <div className="text-xs">
-            Guarda aquí ideas, hoteles, tiendas o restaurantes antes de
-            asignarlos a un día.
+            Guarda aquí restaurantes, tiendas, hoteles o links que todavía no
+            quieres poner en un día concreto.
           </div>
+          <button className="btn-outline" onClick={handleAdd}>
+            Añadir primer lugar
+          </button>
         </div>
       ) : (
         <>
@@ -72,21 +81,21 @@ export default function MyPlacesPanel() {
           </p>
 
           <ul className="list scroll-list my-places-list">
-            {pool.map((p) => (
-              <li key={p.id} className="my-place-card">
+            {pool.map((place) => (
+              <li key={place.id} className="my-place-card">
                 <button
                   className="my-place-main"
                   onClick={() => {
-                    setSelected(p.id);
+                    setSelected(place.id);
                     setShowMap(false);
                   }}
                 >
                   <div className="my-place-title-row">
-                    <span className="my-place-title">{p.name}</span>
-                    <CategoryBadge category={p.category || "otro"} />
+                    <span className="my-place-title">{place.name}</span>
+                    <CategoryBadge category={place.category || "otro"} />
                   </div>
                   <div className="my-place-meta">
-                    {p.notes ? p.notes.slice(0, 90) : "Sin notas"}
+                    {place.notes ? place.notes.slice(0, 90) : "Sin notas"}
                   </div>
                 </button>
 
@@ -96,7 +105,7 @@ export default function MyPlacesPanel() {
                   )}
                   <button
                     className="btn-outline text-xs"
-                    onClick={() => handleAssignToCurrentDay(p.id)}
+                    onClick={() => handleAssignToCurrentDay(place.id)}
                   >
                     Enviar al día
                   </button>

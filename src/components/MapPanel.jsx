@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useItineraryStore } from "../hooks/useItineraryStore";
 import { JAPAN_BOUNDS } from "../utils/geo";
 import SelectedPlaceView from "./SelectedPlaceView";
+import { useFeedback } from "./ui/FeedbackProvider";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -86,6 +87,34 @@ const BASEMAPS = (key) => ({
     attr: "© MapTiler, OSM",
   },
 });
+
+function getCoord(place) {
+  const lat = Number(place.lat);
+  const lng = Number(place.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return `${lat.toFixed(6)},${lng.toFixed(6)}`;
+}
+
+function buildGoogleExternalUrl(places) {
+  const coords = places.map(getCoord).filter(Boolean);
+  if (!coords.length) return "";
+  if (coords.length === 1) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+      coords[0]
+    )}`;
+  }
+  const origin = coords[0];
+  const destination = coords[coords.length - 1];
+  const waypoints = coords.slice(1, -1).slice(0, 8).join("|");
+  const params = new URLSearchParams({
+    api: "1",
+    origin,
+    destination,
+    travelmode: "walking",
+  });
+  if (waypoints) params.set("waypoints", waypoints);
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
 
 function ClickToAdd({ enabled }) {
   const addPlace = useItineraryStore((s) => s.addPlace);
@@ -184,6 +213,7 @@ function FitToImageMap({ imageBounds, places }) {
 
 function ImageMapLoader({ imageUrl, selectedDate }) {
   const setDayMap = useItineraryStore((s) => s.setDayMap);
+  const { toast } = useFeedback();
 
   useEffect(() => {
     if (!imageUrl) return;
@@ -196,15 +226,20 @@ function ImageMapLoader({ imageUrl, selectedDate }) {
       });
     };
     img.onerror = () => {
-      alert("No se pudo cargar esa imagen. Revisa que sea una URL directa o un archivo de imagen valido.");
+      toast({
+        title: "No se pudo cargar esa imagen",
+        message: "Revisa que sea una URL directa.",
+        tone: "danger",
+      });
     };
     img.src = imageUrl;
-  }, [imageUrl, selectedDate, setDayMap]);
+  }, [imageUrl, selectedDate, setDayMap, toast]);
 
   return null;
 }
 
-export default function MapPanel() {
+export default function MapPanel({ trip, currentUser }) {
+  const { toast, confirm } = useFeedback();
   const {
     placesBySelectedDate,
     routesBySelectedDate,
@@ -242,7 +277,6 @@ export default function MapPanel() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [controlsCollapsed, setControlsCollapsed] = useState(false);
   const mapRef = useRef(null);
-  const fileRef = useRef(null);
 
   const bounds = useMemo(
     () => L.latLngBounds(JAPAN_BOUNDS.map(([a, b]) => [a, b])),
@@ -252,6 +286,10 @@ export default function MapPanel() {
   const bm = basemaps[ui.basemap] || basemaps["carto-en"];
   const dayMap = dayMaps?.[selectedDate] || null;
   const hasImageMap = Boolean(dayMap?.imageUrl);
+  const googleExternalUrl = useMemo(
+    () => buildGoogleExternalUrl(geoPlaces),
+    [geoPlaces]
+  );
   const imageWidth = Number(dayMap?.width) || 1600;
   const imageHeight = Number(dayMap?.height) || 1000;
   const imageBounds = useMemo(
@@ -263,7 +301,9 @@ export default function MapPanel() {
     [imageHeight, imageWidth]
   );
 
-  if (!ui.showMap && selectedId) return <SelectedPlaceView />;
+  if (!ui.showMap && selectedId) {
+    return <SelectedPlaceView trip={trip} currentUser={currentUser} />;
+  }
 
   async function handleSearch(e) {
     e.preventDefault();
@@ -280,7 +320,11 @@ export default function MapPanel() {
       const data = await resp.json();
 
       if (!Array.isArray(data) || !data.length) {
-        alert("No se encontraron resultados para esa busqueda.");
+        toast({
+          title: "Sin resultados",
+          message: "Prueba con otro nombre o agrega el punto manualmente.",
+          tone: "warning",
+        });
         return;
       }
 
@@ -298,12 +342,16 @@ export default function MapPanel() {
         category: "otro",
         lat,
         lng,
-        notes: `Resultado de busqueda: ${best.display_name}`,
+        notes: `Resultado de búsqueda: ${best.display_name}`,
       });
       if (id) selectNewPlace(id);
     } catch (err) {
       console.error("Error buscando lugar:", err);
-      alert("Error al buscar el lugar. Intenta de nuevo.");
+      toast({
+        title: "Error al buscar el lugar",
+        message: "Intenta de nuevo en unos segundos.",
+        tone: "danger",
+      });
     } finally {
       setSearchLoading(false);
     }
@@ -318,36 +366,20 @@ export default function MapPanel() {
   const loadImageUrl = () => {
     const url = imageUrlDraft.trim();
     if (!/^https?:\/\/.+/i.test(url)) {
-      alert("Pon una URL de imagen valida que empiece con http:// o https://");
+      toast({
+        title: "URL de imagen inválida",
+        message: "Debe empezar con http:// o https://.",
+        tone: "warning",
+      });
       return;
     }
     setDayMap(selectedDate, { imageUrl: url, source: "url", name: url });
     setImageUrlDraft("");
   };
 
-  const handleImageFile = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      alert("El archivo debe ser una imagen.");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setDayMap(selectedDate, {
-        imageUrl: reader.result,
-        source: "upload",
-        name: file.name,
-      });
-    };
-    reader.readAsDataURL(file);
-    event.target.value = "";
-  };
-
   const mapHint = hasImageMap
     ? "Click agrega pin sobre tu plano. Arrastra los pines para ajustar."
-    : "Puedes usar un mapa normal o cargar un plano del parque para este dia.";
+    : "Puedes usar un mapa normal o cargar un plano del parque para este día.";
 
   return (
     <div className="h-full w-full" style={{ position: "relative" }}>
@@ -358,7 +390,7 @@ export default function MapPanel() {
       >
         <div className="map-overlay-header">
           <div className="map-overlay-title">
-            <span>{hasImageMap ? "Mapa del dia" : "Mapa"}</span>
+            <span>{hasImageMap ? "Mapa del día" : "Mapa"}</span>
             {hasImageMap && !controlsCollapsed && (
               <span className="chip">Plano activo</span>
             )}
@@ -385,6 +417,16 @@ export default function MapPanel() {
             <button className="btn" type="submit" disabled={searchLoading}>
               {searchLoading ? "Buscando..." : "Buscar"}
             </button>
+            {googleExternalUrl && (
+              <a
+                className="btn-outline map-google-link"
+                href={googleExternalUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Abrir en Google Maps
+              </a>
+            )}
           </form>
         )}
 
@@ -392,7 +434,7 @@ export default function MapPanel() {
         <div className="map-controls">
           <div className="custom-map-box">
             <div className="custom-map-title">
-              <span>Mapa del dia</span>
+              <span>Mapa del día</span>
               {hasImageMap && <span className="chip">Plano activo</span>}
             </div>
             <div className="text-xs">{mapHint}</div>
@@ -408,28 +450,19 @@ export default function MapPanel() {
               </button>
             </div>
             <div className="map-actions">
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden-file-input"
-                onChange={handleImageFile}
-              />
-              <button
-                className="btn-outline"
-                type="button"
-                onClick={() => fileRef.current?.click()}
-              >
-                Subir imagen
-              </button>
               {hasImageMap && (
                 <button
                   className="btn-outline"
                   type="button"
-                  onClick={() => {
-                    if (confirm("Quitar el plano de este dia? Los pines pasan a My Places.")) {
-                      removeDayMap(selectedDate);
-                    }
+                  onClick={async () => {
+                    const accepted = await confirm({
+                      title: "Quitar plano del día",
+                      message:
+                        "Los pines de este plano volverán a My Places.",
+                      confirmLabel: "Quitar plano",
+                      tone: "danger",
+                    });
+                    if (accepted) removeDayMap(selectedDate);
                   }}
                 >
                   Quitar plano
@@ -459,10 +492,12 @@ export default function MapPanel() {
             </label>
           )}
 
-          {!hasImageMap && ui.basemap === "maptiler-es" && !ui.mapTilerKey && (
+          {!hasImageMap &&
+            ui.basemap === "maptiler-es" &&
+            !ui.mapTilerKey && (
             <div className="text-xs">
-              Para etiquetas en espanol, guarda tu clave de MapTiler en
-              Configuracion.
+              Para etiquetas en español, guarda tu clave de MapTiler en
+              Configuración.
             </div>
           )}
 

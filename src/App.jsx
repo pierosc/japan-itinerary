@@ -1,120 +1,22 @@
-// src/App.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SignInButton } from "@clerk/clerk-react";
-import { createClient } from "@supabase/supabase-js";
 import PlannerShell from "./components/PlannerShell";
 import LandingPage from "./components/LandingPage";
+import PublicTripPage from "./components/PublicTripPage";
 import { useItineraryStore } from "./hooks/useItineraryStore";
+import { supabase } from "./components/lib/supabaseClient";
+import {
+  loadTripLocal,
+  saveTripLocal,
+} from "./components/lib/localStorageAdapter";
+import {
+  fetchTripsOnline,
+  saveTripOnline,
+} from "./components/services/tripService";
+import { syncCurrentUserProfile } from "./components/services/userService";
+import { useFeedback } from "./components/ui/FeedbackProvider";
 import "./styles.css";
 
-/* ========= Supabase client (singleton in-module) ========= */
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  console.warn(
-    "[Supabase] Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en .env"
-  );
-}
-
-const supabase =
-  supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
-
-/* ========= Helpers LOCAL (localStorage) ========= */
-const LS_PREFIX = "trip-planner:";
-
-function saveTripLocal(tripId, data) {
-  try {
-    localStorage.setItem(LS_PREFIX + tripId, JSON.stringify(data));
-  } catch (err) {
-    console.error("Error guardando viaje en localStorage", err);
-  }
-}
-
-function loadTripLocal(tripId) {
-  try {
-    const raw = localStorage.getItem(LS_PREFIX + tripId);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error("Error leyendo viaje de localStorage", err);
-    return null;
-  }
-}
-
-/* ========= Supabase helpers ========= */
-async function saveTripOnline({
-  tripId,
-  userId,
-  ownerUserId,
-  sharedWithUserIds,
-  data,
-  title,
-  destination,
-  imageUrl,
-}) {
-  if (!supabase)
-    return { ok: false, error: new Error("Supabase no configurado.") };
-  if (!userId) return { ok: false, error: new Error("Missing userId") };
-
-  try {
-    const payload = {
-      trip_id: tripId,
-      user_id: ownerUserId || userId,
-      shared_with_user_ids: sharedWithUserIds || [],
-      data,
-      title: title || "Sin título",
-      destination: destination || "Japan",
-      image_url: imageUrl || null,
-    };
-
-    const { data: upserted, error } = await supabase
-      .from("trip_data")
-      .upsert(payload, { onConflict: "trip_id" })
-      .select("trip_id, updated_at")
-      .single();
-
-    if (error) return { ok: false, error };
-    return { ok: true, data: upserted };
-  } catch (err) {
-    return { ok: false, error: err };
-  }
-}
-
-// ✅ LISTA: propios + compartidos
-async function fetchTripsOnline(userId) {
-  if (!supabase || !userId)
-    return { ok: false, error: new Error("Missing userId") };
-
-  try {
-    const { data, error } = await supabase
-      .from("trip_data")
-      .select(
-        "trip_id, title, destination, image_url, updated_at, data, user_id, shared_with_user_ids"
-      )
-      .or(`user_id.eq.${userId},shared_with_user_ids.cs.{${userId}}`)
-      .order("updated_at", { ascending: false });
-
-    if (error) return { ok: false, error };
-
-    const trips = (data || []).map((row) => ({
-      id: row.trip_id,
-      title: row.title || "Sin título",
-      destination: row.destination || "Japan",
-      coverImage: row.image_url || "",
-      updatedAt: row.updated_at || null,
-      data: row.data || null,
-      ownerUserId: row.user_id || null,
-      sharedWithUserIds: row.shared_with_user_ids || [],
-    }));
-
-    return { ok: true, trips };
-  } catch (err) {
-    return { ok: false, error: err };
-  }
-}
-
-/* ========= Entry ========= */
 function EntryScreen({ onGuest, hasClerk }) {
   return (
     <div className="entry-root">
@@ -148,48 +50,68 @@ function EntryScreen({ onGuest, hasClerk }) {
   );
 }
 
+function stripBase64FromExport(data) {
+  if (!data) return data;
+
+  return {
+    ...data,
+    places: (data.places || []).map((place) => ({
+      ...place,
+      images: (place.images || [])
+        .map((image) => ({
+          name: image.name,
+          url: image.url || null,
+        }))
+        .filter((image) => image.url),
+      items: (place.items || []).map((item) => {
+        const clean = { ...item };
+        delete clean.imageDataUrl;
+        return clean;
+      }),
+    })),
+    dayMaps: Object.fromEntries(
+      Object.entries(data.dayMaps || {}).filter(([, map]) =>
+        /^https?:\/\//i.test(map?.imageUrl || "")
+      )
+    ),
+  };
+}
+
 export default function App({ auth }) {
-  const { isSignedIn, isLoaded, user, hasClerk } = auth;
+  const { isSignedIn, isLoaded, user, hasClerk, supabaseReady = true } = auth;
+  const { toast } = useFeedback();
 
-  // ✅ hooks del store SIEMPRE arriba
-  const theme = useItineraryStore((s) => s.ui.theme);
-  const storageMode = useItineraryStore((s) => s.ui.storageMode);
-  const exportJSON = useItineraryStore((s) => s.exportJSON);
-  const importJSON = useItineraryStore((s) => s.importJSON);
-  const clearAll = useItineraryStore((s) => s.clearAll);
+  const theme = useItineraryStore((state) => state.ui.theme);
+  const storageMode = useItineraryStore((state) => state.ui.storageMode);
+  const exportJSON = useItineraryStore((state) => state.exportJSON);
+  const importJSON = useItineraryStore((state) => state.importJSON);
+  const clearAll = useItineraryStore((state) => state.clearAll);
 
-  // Estado app
   const [guest, setGuest] = useState(false);
   const [trips, setTrips] = useState([]);
   const [activeTripId, setActiveTripId] = useState(null);
   const [loadingTrips, setLoadingTrips] = useState(false);
   const [tripsError, setTripsError] = useState(null);
-
-  // ✅ Estado guardado (para autosave + UI)
-  const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
+  const [saveState, setSaveState] = useState("idle");
   const [saveMessage, setSaveMessage] = useState("");
 
-  // Evitar overlap de guardados
   const savingRef = useRef(false);
-
   const canEnter = isSignedIn || guest;
+  const isPublicView =
+    typeof window !== "undefined" && window.location.hash.startsWith("#public=");
 
   const activeTrip = useMemo(
-    () => trips.find((t) => t.id === activeTripId) || null,
+    () => trips.find((trip) => trip.id === activeTripId) || null,
     [trips, activeTripId]
   );
 
-  // Tema body
   useEffect(() => {
     if (typeof document === "undefined") return;
-    const body = document.body;
-    if (theme === "light") body.classList.add("theme-light");
-    else body.classList.remove("theme-light");
+    document.body.classList.toggle("theme-light", theme === "light");
   }, [theme]);
 
-  // Cargar trips desde Supabase cuando hay sesión
   useEffect(() => {
-    if (!isLoaded) return;
+    if (!isLoaded || !supabaseReady) return;
 
     if (!isSignedIn || !user || !supabase) {
       setTrips([]);
@@ -203,27 +125,39 @@ export default function App({ auth }) {
     setTripsError(null);
 
     (async () => {
-      const res = await fetchTripsOnline(user.id);
+      const result = await fetchTripsOnline(user.id);
       if (cancelled) return;
 
-      if (!res.ok) {
-        setTripsError(res.error?.message || "Error cargando viajes.");
+      if (!result.ok) {
+        setTripsError(result.error?.message || "Error cargando viajes.");
         setTrips([]);
       } else {
-        setTrips(res.trips);
+        setTrips(result.trips);
       }
+
       setLoadingTrips(false);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, isSignedIn, user?.id]);
+  }, [isLoaded, isSignedIn, supabaseReady, user]);
+
+  useEffect(() => {
+    if (!isLoaded || !supabaseReady || !isSignedIn || !user?.id || !supabase) {
+      return;
+    }
+
+    syncCurrentUserProfile(user).then((result) => {
+      if (!result.ok) {
+        console.warn("[profiles] No se pudo sincronizar el perfil", result.error);
+      }
+    });
+  }, [isLoaded, isSignedIn, supabaseReady, user]);
 
   const handleAddTrip = (data) => {
     const id = `trip-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
 
-    // limpiar store para empezar viaje "vacío"
     clearAll();
 
     const newTrip = {
@@ -237,91 +171,76 @@ export default function App({ auth }) {
       sharedWithUserIds: [],
     };
 
-    setTrips((prev) => [newTrip, ...prev]);
+    setTrips((currentTrips) => [newTrip, ...currentTrips]);
     setActiveTripId(id);
   };
 
   const handleEnterTrip = (id) => {
-    const trip = trips.find((t) => t.id === id) || null;
+    const trip = trips.find((candidate) => candidate.id === id) || null;
     setActiveTripId(id);
 
-    // ✅ Online: si ya tenemos data en memoria, la importamos
     if (storageMode === "online" && trip?.data) {
       try {
         importJSON(JSON.stringify(trip.data));
-      } catch (e) {
-        console.error("Error importando trip.data", e);
+      } catch (error) {
+        console.error("Error importando trip.data", error);
       }
       return;
     }
 
-    // ✅ Local: cargar desde localStorage
     if (storageMode === "local") {
       const localData = loadTripLocal(id);
-      if (localData) {
-        try {
-          importJSON(JSON.stringify(localData));
-        } catch (e) {
-          console.error("Error importando localData", e);
-        }
-      } else {
-        // si no hay, al menos queda store “como está”
-        // (si prefieres limpio, descomenta)
-        // clearAll();
+      if (!localData) return;
+
+      try {
+        importJSON(JSON.stringify(localData));
+      } catch (error) {
+        console.error("Error importando localData", error);
       }
     }
   };
 
-  const handleBackToTrips = () => {
-    setActiveTripId(null);
+  const handleUpdateTripMeta = (patch) => {
+    if (!activeTripId) return;
+    setTrips((currentTrips) =>
+      currentTrips.map((trip) =>
+        trip.id === activeTripId
+          ? { ...trip, ...patch, updatedAt: new Date().toISOString() }
+          : trip
+      )
+    );
   };
 
-  function stripBase64FromExport(data) {
-    if (!data?.places) return data;
-    return {
-      ...data,
-      places: data.places.map((p) => ({
-        ...p,
-        images: (p.images || [])
-          .map((img) => ({
-            name: img.name,
-            url: img.url || null,
-            // NO dataUrl
-          }))
-          .filter((img) => img.url), // deja solo las que tienen url
-      })),
-    };
-  }
-
-  // ✅ Guardar (manual o autosave)
   const performSave = async ({ silent = false } = {}) => {
-    if (!activeTrip) return;
+    if (!activeTrip || savingRef.current) return;
 
-    if (savingRef.current) return; // evita overlaps
     savingRef.current = true;
-
     setSaveState("saving");
-    setSaveMessage("Guardando…");
+    setSaveMessage("Guardando...");
 
     let data;
     try {
-      data = JSON.parse(exportJSON());
-      data = stripBase64FromExport(data);
-    } catch (e) {
-      console.error("Bad exportJSON", e);
+      data = stripBase64FromExport(JSON.parse(exportJSON()));
+    } catch (error) {
+      console.error("Bad exportJSON", error);
       setSaveState("error");
       setSaveMessage("Error al guardar");
       savingRef.current = false;
-      if (!silent) alert("Error preparando datos para guardar.");
+      if (!silent) {
+        toast({
+          title: "No se pudo preparar el guardado",
+          message: "Revisa el contenido del viaje e intenta de nuevo.",
+          tone: "danger",
+        });
+      }
       return;
     }
 
-    // ✅ Mantener data en memoria SIEMPRE (para resumen actualizado en Landing)
-    setTrips((prev) =>
-      prev.map((t) =>
-        t.id === activeTrip.id
-          ? { ...t, data, updatedAt: new Date().toISOString() }
-          : t
+    setTrips((currentTrips) =>
+      currentTrips.map((trip) =>
+        trip.id === activeTrip.id
+          ? { ...trip, data, updatedAt: new Date().toISOString() }
+          : trip
       )
     );
 
@@ -329,44 +248,54 @@ export default function App({ auth }) {
       if (storageMode === "local") {
         saveTripLocal(activeTrip.id, data);
         setSaveState("saved");
-        setSaveMessage("Guardado ✓");
-        if (!silent) alert("✅ Guardado local.");
-      } else {
-        // si no hay sesión, no intentamos online
-        if (!isSignedIn || !user?.id) {
-          setSaveState("error");
-          setSaveMessage("Inicia sesión para guardar");
-          if (!silent) alert("Inicia sesión para guardar online.");
-        } else {
-          const result = await saveTripOnline({
-            tripId: activeTrip.id,
-            userId: user.id,
-            ownerUserId: activeTrip.ownerUserId || user.id,
-            sharedWithUserIds: activeTrip.sharedWithUserIds || [],
-            data,
-            title: activeTrip.title,
-            destination: activeTrip.destination,
-            imageUrl: activeTrip.coverImage,
-          });
-
-          if (!result.ok) {
-            setSaveState("error");
-            setSaveMessage("Error al guardar");
-            if (!silent) {
-              alert("❌ Error guardando: " + (result.error?.message || ""));
-            } else {
-              console.error("[Autosave] Error guardando", result.error);
-            }
-          } else {
-            setSaveState("saved");
-            setSaveMessage("Guardado ✓");
-          }
-        }
+        setSaveMessage("Guardado");
+        if (!silent) toast({ title: "Guardado local", tone: "success" });
+        return;
       }
+
+      if (!isSignedIn || !user?.id) {
+        setSaveState("error");
+        setSaveMessage("Inicia sesión para guardar");
+        if (!silent) {
+          toast({
+            title: "Inicia sesión para guardar online",
+            message: "También puedes cambiar a modo local desde Configuración.",
+            tone: "warning",
+          });
+        }
+        return;
+      }
+
+      const result = await saveTripOnline({
+        tripId: activeTrip.id,
+        userId: user.id,
+        ownerUserId: activeTrip.ownerUserId || user.id,
+        sharedWithUserIds: activeTrip.sharedWithUserIds || [],
+        data,
+        title: activeTrip.title,
+        destination: activeTrip.destination,
+        imageUrl: activeTrip.coverImage,
+      });
+
+      if (!result.ok) {
+        setSaveState("error");
+        setSaveMessage("Error al guardar");
+        if (!silent) {
+          toast({
+            title: "Error guardando",
+            message: result.error?.message || "Supabase rechazó el guardado.",
+            tone: "danger",
+          });
+        } else {
+          console.error("[Autosave] Error guardando", result.error);
+        }
+        return;
+      }
+
+      setSaveState("saved");
+      setSaveMessage("Guardado");
     } finally {
       savingRef.current = false;
-
-      // vuelve a normal luego de un ratito
       setTimeout(() => {
         setSaveState("idle");
         setSaveMessage("");
@@ -374,9 +303,6 @@ export default function App({ auth }) {
     }
   };
 
-  const handleSave = () => performSave({ silent: false });
-
-  // ✅ Autosave cada 30s (solo online + sesión + trip activo)
   useEffect(() => {
     if (!activeTrip) return;
     if (storageMode !== "online") return;
@@ -392,10 +318,12 @@ export default function App({ auth }) {
 
   return (
     <div className="h-screen w-screen p-3">
-      {!isLoaded ? (
+      {isPublicView ? (
+        <PublicTripPage />
+      ) : !isLoaded ? (
         <div className="entry-root">
           <div className="entry-card">
-            <div className="font-semibold">Inicializando…</div>
+            <div className="font-semibold">Inicializando...</div>
             <div className="text-xs mt-2">Cargando sesión y configuración.</div>
           </div>
         </div>
@@ -406,11 +334,11 @@ export default function App({ auth }) {
           trip={activeTrip}
           currentUser={user}
           hasClerk={hasClerk}
-          onBack={handleBackToTrips}
-          onSave={handleSave}
-          // (si luego separas AppBar, puedes pasar saveState/saveMessage también)
+          onBack={() => setActiveTripId(null)}
+          onSave={() => performSave({ silent: false })}
           saveState={saveState}
           saveMessage={saveMessage}
+          onUpdateTripMeta={handleUpdateTripMeta}
         />
       ) : (
         <LandingPage

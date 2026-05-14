@@ -41,7 +41,7 @@ export default function PlannerShell({
       <div className="planner-main h-full">
         <div className="panel map-panel-wrap">
           <div className="h-full">
-            <MapPanel />
+            <MapPanel trip={trip} currentUser={currentUser} />
           </div>
         </div>
 
