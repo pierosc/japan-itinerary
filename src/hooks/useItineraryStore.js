@@ -36,6 +36,38 @@ const D0 = todayISO();
 const initialUIPrefs = loadUIPrefs();
 const defaultCurrency = { code: "USD", ratePerJPY: 0.0065 };
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function duplicateNameFor(name, places) {
+  const baseName =
+    (name || "Lugar sin nombre").trim().replace(/\s+\((\d+)\)$/, "") ||
+    "Lugar sin nombre";
+  const pattern = new RegExp(`^${escapeRegExp(baseName)}(?: \\((\\d+)\\))?$`);
+  const highestSuffix = places.reduce((highest, place) => {
+    const match = pattern.exec((place.name || "").trim());
+    if (!match) return highest;
+    return Math.max(highest, match[1] ? Number(match[1]) || 0 : 0);
+  }, 0);
+
+  return `${baseName} (${highestSuffix + 1})`;
+}
+
+function clonePlaceForDuplicate(place, name, date) {
+  const duplicate = {
+    ...place,
+    id: uuid(),
+    name,
+    date,
+    previewDate: null,
+    images: (place.images || []).map((image) => ({ ...image })),
+    items: (place.items || []).map((item) => ({ ...item, id: uuid() })),
+  };
+
+  return duplicate;
+}
+
 export const useItineraryStore = create((set, get) => ({
   // ===== Datos base =====
   places: [],
@@ -47,6 +79,8 @@ export const useItineraryStore = create((set, get) => ({
   days: [D0],
   selectedDate: D0,
   selectedId: null,
+  smartTripPreviewPlan: null,
+  smartTripUndoSnapshot: null,
 
   // Conversión de moneda
   currency: initialUIPrefs.currency || defaultCurrency,
@@ -223,6 +257,8 @@ export const useItineraryStore = create((set, get) => ({
 
   // ====== Lugares ======
   setSelected: (id) => set({ selectedId: id }),
+  setSmartTripPreviewPlan: (plan) => set({ smartTripPreviewPlan: plan }),
+  setSmartTripUndoSnapshot: (snapshot) => set({ smartTripUndoSnapshot: snapshot }),
 
   addPlace: (place) => {
     const id = uuid();
@@ -256,25 +292,79 @@ export const useItineraryStore = create((set, get) => ({
       selectedId: s.selectedId === id ? null : s.selectedId,
     })),
 
+  duplicatePlace: (id) => {
+    const state = get();
+    const index = state.places.findIndex((place) => place.id === id);
+    if (index === -1) return null;
+
+    const place = state.places[index];
+    const date = place.date ?? state.selectedDate;
+    const duplicate = clonePlaceForDuplicate(
+      place,
+      duplicateNameFor(place.name, state.places),
+      date
+    );
+
+    set((s) => {
+      const currentIndex = s.places.findIndex((candidate) => candidate.id === id);
+      if (currentIndex === -1) return {};
+
+      const currentPlace = s.places[currentIndex];
+      const currentDate = currentPlace.date ?? s.selectedDate;
+      const nextPlaces = [...s.places];
+      nextPlaces.splice(currentIndex + 1, 0, duplicate);
+
+      const visiblePlacesForDate = s.places.filter(
+        (candidate) =>
+          candidate.date === currentDate && candidate.category !== "hotel"
+      );
+      const placeIndexForDate = visiblePlacesForDate.findIndex(
+        (candidate) => candidate.id === id
+      );
+      const nextPlaceForDate = visiblePlacesForDate[placeIndexForDate + 1];
+      const routes = nextPlaceForDate
+        ? s.routes.filter(
+            (route) =>
+              !(
+                route.date === currentDate &&
+                route.fromId === id &&
+                route.toId === nextPlaceForDate.id
+              )
+          )
+        : s.routes;
+
+      return {
+        places: nextPlaces,
+        routes,
+        selectedId: duplicate.id,
+      };
+    });
+
+    return duplicate.id;
+  },
+
   // ====== My Places ======
   unassignedPlaces: () => {
     const { places } = get();
     return places.filter((p) => !p.date);
   },
 
-  addUnassignedPlace: (place) =>
+  addUnassignedPlace: (place) => {
+    const id = uuid();
     set((s) => ({
       places: [
         ...s.places,
         {
-          id: uuid(),
+          id,
           type: "place",
           date: null,
           images: [],
           ...place,
         },
       ],
-    })),
+    }));
+    return id;
+  },
 
   assignPlaceToDay: (id, date) =>
     set((s) => {
@@ -313,6 +403,57 @@ export const useItineraryStore = create((set, get) => ({
 
       return { places: [...others, ...ordered], routes: keepRoutes };
     }),
+
+  applyTripOrganization: (dayPlans) =>
+    set((s) => {
+      const dateById = new Map();
+      const orderById = new Map();
+
+      dayPlans.forEach((day) => {
+        (day.orderedIds || []).forEach((id, index) => {
+          dateById.set(id, day.date);
+          orderById.set(id, index);
+        });
+      });
+
+      const plannedIds = new Set(dateById.keys());
+      const plannedPlaces = s.places
+        .filter((place) => plannedIds.has(place.id))
+        .map((place) => ({ ...place, date: dateById.get(place.id), previewDate: null }))
+        .sort((a, b) => {
+          const dateCompare = String(a.date).localeCompare(String(b.date));
+          if (dateCompare !== 0) return dateCompare;
+          return (orderById.get(a.id) || 0) - (orderById.get(b.id) || 0);
+        });
+      const unplannedPlaces = s.places.filter((place) => !plannedIds.has(place.id));
+
+      const validRoutePairs = new Set();
+      dayPlans.forEach((day) => {
+        (day.orderedIds || []).forEach((id, index, ids) => {
+          if (index < ids.length - 1) validRoutePairs.add(`${day.date}|${id}|${ids[index + 1]}`);
+        });
+      });
+
+      return {
+        places: [...plannedPlaces, ...unplannedPlaces],
+        routes: s.routes.filter((route) =>
+          validRoutePairs.has(`${route.date}|${route.fromId}|${route.toId}`)
+        ),
+        selectedDate: dayPlans[0]?.date || s.selectedDate,
+        selectedId: null,
+        smartTripPreviewPlan: null,
+      };
+    }),
+
+  restoreTripOrganization: (snapshot) =>
+    set(() => ({
+      places: snapshot.places || [],
+      routes: snapshot.routes || [],
+      selectedDate: snapshot.selectedDate,
+      selectedId: snapshot.selectedId || null,
+      smartTripPreviewPlan: null,
+      smartTripUndoSnapshot: null,
+    })),
 
   // ====== Rutas ======
   addRouteBetween: (date, fromId, toId, mode = "walk", geojson = null) =>

@@ -94,6 +94,7 @@ export default function App({ auth }) {
   const [tripsError, setTripsError] = useState(null);
   const [saveState, setSaveState] = useState("idle");
   const [saveMessage, setSaveMessage] = useState("");
+  const [duplicatingTripId, setDuplicatingTripId] = useState(null);
 
   const savingRef = useRef(false);
   const canEnter = isSignedIn || guest;
@@ -173,6 +174,80 @@ export default function App({ auth }) {
 
     setTrips((currentTrips) => [newTrip, ...currentTrips]);
     setActiveTripId(id);
+  };
+
+  const cloneTripData = (data) => {
+    if (!data) return null;
+    return JSON.parse(JSON.stringify(data));
+  };
+
+  const handleDuplicateTrip = async (trip) => {
+    if (!trip || duplicatingTripId) return;
+
+    const id = `trip-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
+    const now = new Date().toISOString();
+    let data = cloneTripData(trip.data);
+
+    if (!data && storageMode === "local") {
+      data = cloneTripData(loadTripLocal(trip.id));
+    }
+
+    const duplicatedTrip = {
+      ...trip,
+      id,
+      title: `${trip.title || "Sin titulo"} (copia)`,
+      updatedAt: now,
+      data,
+      ownerUserId: user?.id ?? trip.ownerUserId ?? null,
+      sharedWithUserIds: [],
+    };
+
+    setDuplicatingTripId(trip.id);
+    setTrips((currentTrips) => [duplicatedTrip, ...currentTrips]);
+
+    try {
+      if (storageMode === "local") {
+        if (data) saveTripLocal(id, data);
+        toast({ title: "Viaje duplicado", tone: "success" });
+        return;
+      }
+
+      if (!isSignedIn || !user?.id) {
+        toast({
+          title: "Viaje duplicado en esta sesion",
+          message: "Inicia sesion o usa modo local para conservarlo.",
+          tone: "warning",
+        });
+        return;
+      }
+
+      const result = await saveTripOnline({
+        tripId: id,
+        userId: user.id,
+        ownerUserId: user.id,
+        sharedWithUserIds: [],
+        data: data || {},
+        title: duplicatedTrip.title,
+        destination: duplicatedTrip.destination,
+        imageUrl: duplicatedTrip.coverImage,
+      });
+
+      if (!result.ok) {
+        setTrips((currentTrips) =>
+          currentTrips.filter((candidate) => candidate.id !== id)
+        );
+        toast({
+          title: "No se pudo duplicar",
+          message: result.error?.message || "El guardado online fallo.",
+          tone: "danger",
+        });
+        return;
+      }
+
+      toast({ title: "Viaje duplicado", tone: "success" });
+    } finally {
+      setDuplicatingTripId(null);
+    }
   };
 
   const handleEnterTrip = (id) => {
@@ -347,6 +422,8 @@ export default function App({ auth }) {
           error={tripsError}
           onEnterTrip={handleEnterTrip}
           onAddTrip={handleAddTrip}
+          onDuplicateTrip={handleDuplicateTrip}
+          duplicatingTripId={duplicatingTripId}
         />
       )}
     </div>

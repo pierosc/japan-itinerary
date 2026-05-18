@@ -116,17 +116,19 @@ export default function PlaceEditor({ place, trip, currentUser }) {
               </select>
             </label>
 
-            <label className="place-detail-field">
-              <span className="text-xs">Fecha</span>
-              <input
-                type="date"
-                className="input"
-                value={place.date || ""}
-                onChange={(e) =>
-                  updatePlace(place.id, { date: e.target.value })
-                }
-              />
-            </label>
+            {place.category !== "hotel" && (
+              <label className="place-detail-field">
+                <span className="text-xs">Fecha</span>
+                <input
+                  type="date"
+                  className="input"
+                  value={place.date || ""}
+                  onChange={(e) =>
+                    updatePlace(place.id, { date: e.target.value })
+                  }
+                />
+              </label>
+            )}
           </div>
         </section>
 
@@ -187,6 +189,40 @@ export default function PlaceEditor({ place, trip, currentUser }) {
             </label>
           </div>
         </section>
+
+        {place.category === "hotel" && (
+          <section className="place-detail-section">
+            <div className="place-detail-section-title">Estadia</div>
+            <div className="place-detail-grid">
+              <label className="place-detail-field">
+                <span className="text-xs">Check-in</span>
+                <input
+                  type="date"
+                  className="input"
+                  value={place.checkInDate || place.date || ""}
+                  onChange={(e) =>
+                    updatePlace(place.id, {
+                      checkInDate: e.target.value,
+                      date: null,
+                    })
+                  }
+                />
+              </label>
+
+              <label className="place-detail-field">
+                <span className="text-xs">Check-out</span>
+                <input
+                  type="date"
+                  className="input"
+                  value={place.checkOutDate || ""}
+                  onChange={(e) =>
+                    updatePlace(place.id, { checkOutDate: e.target.value })
+                  }
+                />
+              </label>
+            </div>
+          </section>
+        )}
 
         <section className="place-detail-section">
           <div className="place-detail-section-title">Ubicación</div>

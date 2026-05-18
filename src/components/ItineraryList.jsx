@@ -15,6 +15,7 @@ import {
 import { useItineraryStore } from "../hooks/useItineraryStore";
 import { haversineKm } from "../utils/geo";
 import { formatConvertedJPY } from "../utils/money";
+import { buildIntelligentTripPlan } from "../utils/travelPlanning";
 import CategoryBadge from "./CategoryBadge";
 import SortableItemWithHandle from "./dnd/SortableItemWithHandle";
 import { useFeedback } from "./ui/FeedbackProvider";
@@ -42,17 +43,46 @@ export default function ItineraryList() {
     updatePlace,
     places,
     unassignPlace,
+    duplicatePlace,
     currency,
+    days,
+    smartTripPreviewPlan,
   } = useItineraryStore();
 
   const [editingRoute, setEditingRoute] = useState(null);
   const [selectedLooseId, setSelectedLooseId] = useState("");
 
-  const placesForDay = placesBySelectedDate();
+  const placesForDay = placesBySelectedDate().filter(
+    (place) => place.category !== "hotel"
+  );
   const routes = routesBySelectedDate();
   const pool = unassignedPlaces();
   const hasImageMap = Boolean(dayMaps?.[selectedDate]?.imageUrl);
   const canAddLoose = Boolean(selectedDate) && Boolean(selectedLooseId);
+  const smartPlan = useMemo(
+    () => buildIntelligentTripPlan(places, days),
+    [places, days]
+  );
+  const activeSmartPlan = smartTripPreviewPlan || smartPlan;
+  const previewPlacesForDay = useMemo(() => {
+    if (!smartTripPreviewPlan) return placesForDay;
+    const byId = new Map(places.map((place) => [place.id, place]));
+    const dayPlan = smartTripPreviewPlan.dayPlans.find(
+      (candidate) => candidate.date === selectedDate
+    );
+    return (dayPlan?.orderedIds || []).map((id) => byId.get(id)).filter(Boolean);
+  }, [places, placesForDay, selectedDate, smartTripPreviewPlan]);
+  const visibleSmartWarnings = useMemo(
+    () =>
+      activeSmartPlan.warnings.filter(
+        (warning) => !warning.date || warning.date === selectedDate
+      ),
+    [activeSmartPlan.warnings, selectedDate]
+  );
+  const hasSmartPreview = Boolean(smartTripPreviewPlan);
+  const selectedPreviewSummary = smartTripPreviewPlan?.dayPlans.find(
+    (day) => day.date === selectedDate
+  );
 
   useEffect(() => {
     if (selectedLooseId) return;
@@ -63,9 +93,9 @@ export default function ItineraryList() {
 
   const blocks = useMemo(() => {
     const output = [];
-    for (let index = 0; index < placesForDay.length; index += 1) {
-      const current = placesForDay[index];
-      const next = placesForDay[index + 1];
+    for (let index = 0; index < previewPlacesForDay.length; index += 1) {
+      const current = previewPlacesForDay[index];
+      const next = previewPlacesForDay[index + 1];
       output.push({ kind: "place", place: current });
       if (next) {
         const route =
@@ -77,10 +107,10 @@ export default function ItineraryList() {
       }
     }
     return output;
-  }, [placesForDay, routes]);
+  }, [previewPlacesForDay, routes]);
 
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor));
-  const idsForDnd = placesForDay.map((place) => place.id);
+  const idsForDnd = previewPlacesForDay.map((place) => place.id);
   const numFor = (placeId) => idsForDnd.indexOf(placeId) + 1;
 
   function handleAddLooseToDay() {
@@ -120,6 +150,15 @@ export default function ItineraryList() {
   }
 
   function onDragEnd(event) {
+    if (hasSmartPreview) {
+      toast({
+        title: "Estas viendo una propuesta",
+        message: "Acepta o descarta la propuesta antes de arrastrar puntos.",
+        tone: "warning",
+      });
+      return;
+    }
+
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -337,6 +376,52 @@ export default function ItineraryList() {
         </div>
       </div>
 
+      <div className="smart-order-panel">
+        <div className="smart-order-header">
+          <div>
+            <div className="font-medium">Diagnostico del dia</div>
+            <div className="text-xs">
+              Avisos del dia seleccionado. La reorganizacion global esta en la
+              barra superior.
+            </div>
+          </div>
+        </div>
+
+        {hasSmartPreview && (
+          <div className="smart-preview-note text-xs">
+            Vista previa activa: estas viendo la propuesta para este dia; aun no
+            se guardo.
+          </div>
+        )}
+
+        {selectedPreviewSummary && (
+          <div className="smart-day-summary">
+            <span className="chip">
+              {selectedPreviewSummary.orderedIds.length} puntos
+            </span>
+            <span className="chip">
+              {Math.round(selectedPreviewSummary.totalMinutes / 60)} h aprox.
+            </span>
+            <span className="chip">
+              {selectedPreviewSummary.transitMinutes} min traslado
+            </span>
+          </div>
+        )}
+
+        {visibleSmartWarnings.length > 0 && (
+          <ul className="smart-warning-list">
+            {visibleSmartWarnings.map((warning, index) => (
+              <li
+                key={`${warning.text}-${index}`}
+                className={`smart-warning smart-warning--${warning.tone}`}
+              >
+                {warning.text}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -413,6 +498,39 @@ export default function ItineraryList() {
                         </div>
 
                         <div className="itinerary-item-actions">
+                          <button
+                            className="icon-button itinerary-item-icon-button"
+                            title="Duplicar lugar"
+                            aria-label={`Duplicar ${place.name || "lugar"}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              const duplicateId = duplicatePlace(place.id);
+                              if (duplicateId) {
+                                setShowMap(Boolean(ui.showMap));
+                                toast({
+                                  title: "Lugar duplicado",
+                                  message: "Se agrego una copia al dia seleccionado.",
+                                  tone: "success",
+                                });
+                              }
+                            }}
+                          >
+                            <svg
+                              aria-hidden="true"
+                              focusable="false"
+                              viewBox="0 0 24 24"
+                              className="itinerary-copy-icon"
+                            >
+                              <rect
+                                x="9"
+                                y="9"
+                                width="10"
+                                height="10"
+                                rx="2"
+                              />
+                              <path d="M5 15V7a2 2 0 0 1 2-2h8" />
+                            </svg>
+                          </button>
                           <button
                             className="btn-outline text-xs"
                             title="Mover a My Places"

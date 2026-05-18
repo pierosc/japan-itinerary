@@ -508,6 +508,65 @@ button:disabled {
   gap: 10px;
   align-items: center;
 }
+.smart-order-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 84%, var(--bg));
+}
+.smart-order-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.smart-order-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.smart-preview-note {
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--brand) 38%, var(--border));
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 8%, transparent);
+  font-weight: 800;
+}
+.smart-day-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.smart-warning-list {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.smart-warning {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+  background: color-mix(in srgb, var(--panel) 70%, var(--bg));
+}
+.smart-warning--warning {
+  border-color: color-mix(in srgb, var(--warn) 54%, var(--border));
+  background: color-mix(in srgb, var(--warn) 10%, var(--panel));
+}
+.smart-warning--info {
+  border-color: color-mix(in srgb, var(--brand) 42%, var(--border));
+  background: color-mix(in srgb, var(--brand) 8%, var(--panel));
+}
 .itinerary-item-main {
   min-width: 0;
 }
@@ -521,6 +580,18 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.itinerary-item-icon-button {
+  flex: 0 0 auto;
+}
+.itinerary-copy-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .route-line {
@@ -617,6 +688,52 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.hotels-panel {
+  min-height: 0;
+}
+.hotel-list {
+  gap: 12px;
+}
+.hotel-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 90%, var(--bg));
+  padding: 14px;
+}
+.hotel-card-main {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  display: grid;
+  gap: 4px;
+}
+.hotel-card-title {
+  font-size: 15px;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+.hotel-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.hotel-fields label {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.hotel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .my-place-date {
   color: var(--muted);
@@ -957,6 +1074,67 @@ body.theme-light .trip-card {
   box-shadow: 0 18px 34px rgba(15, 23, 42, 0.2);
   border-color: rgba(37, 99, 235, 0.58);
 }
+.trip-card:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.55);
+  outline-offset: 3px;
+}
+.trip-card-bottom-actions {
+  position: absolute;
+  bottom: 14px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+}
+.trip-card-icon-action {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff;
+  padding: 0;
+  font-size: 18px;
+  font-weight: 850;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.trip-card-icon-action:hover {
+  border-color: rgba(255, 255, 255, 0.58);
+  background: rgba(37, 99, 235, 0.88);
+}
+.trip-card-icon-action:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+.trip-card-copy-icon {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+.trip-card-copy-icon::before,
+.trip-card-copy-icon::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+}
+.trip-card-copy-icon::before {
+  left: 1px;
+  top: 5px;
+  opacity: 0.72;
+}
+.trip-card-copy-icon::after {
+  left: 5px;
+  top: 1px;
+  background: rgba(15, 23, 42, 0.72);
+}
 .trip-card-image-wrapper {
   position: absolute;
   inset: 0;
@@ -989,7 +1167,7 @@ body.theme-light .trip-card-image--placeholder {
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 58px 18px 18px;
+  padding: 58px 62px 18px 18px;
   background: linear-gradient(
     180deg,
     rgba(8, 13, 22, 0) 0%,
@@ -1332,10 +1510,18 @@ body:not(.theme-light) .map-ui-overlay {
   justify-content: flex-end;
   flex-wrap: wrap;
 }
+.planner-smart-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
 
 .planner-back-button,
 .planner-save-button,
-.planner-pdf-button {
+.planner-pdf-button,
+.planner-tool-button {
   min-height: 38px;
   display: inline-flex;
   align-items: center;
@@ -1358,7 +1544,8 @@ body:not(.theme-light) .map-ui-overlay {
 
 .planner-back-button:hover,
 .planner-save-button:hover,
-.planner-pdf-button:hover {
+.planner-pdf-button:hover,
+.planner-tool-button:hover {
   border-color: var(--brand-600);
   background: color-mix(in srgb, var(--brand) 10%, var(--panel));
   color: var(--text);
@@ -1911,7 +2098,12 @@ body:not(.theme-light) .sidebar-panel {
   .planner-back-button,
   .planner-save-button,
   .planner-pdf-button,
+  .planner-tool-button,
   .landing-new-trip-button {
+    width: 100%;
+  }
+
+  .planner-smart-actions {
     width: 100%;
   }
 
@@ -2004,9 +2196,32 @@ body:not(.theme-light) .sidebar-panel {
     grid-template-columns: 1fr;
   }
 
+  .smart-order-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .smart-order-actions,
+  .smart-order-actions .btn,
+  .smart-order-actions .btn-outline {
+    width: 100%;
+  }
+
   .my-place-card {
     grid-template-columns: 1fr;
     gap: 12px;
+  }
+
+  .hotel-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .hotel-actions {
+    justify-content: stretch;
+  }
+
+  .hotel-actions .btn-outline {
+    flex: 1;
   }
 
   .my-place-actions {

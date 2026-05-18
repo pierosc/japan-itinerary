@@ -136,6 +136,8 @@ export default function LandingPage({
   trips,
   onEnterTrip,
   onAddTrip,
+  onDuplicateTrip,
+  duplicatingTripId,
   loading,
   error,
 }) {
@@ -186,6 +188,8 @@ export default function LandingPage({
                 key={trip.id}
                 trip={trip}
                 onClick={() => onEnterTrip(trip.id)}
+                onDuplicate={onDuplicateTrip}
+                duplicateDisabled={duplicatingTripId === trip.id}
               />
             ))}
           </div>

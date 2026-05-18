@@ -15,7 +15,7 @@ export default function MyPlacesPanel() {
     setShowMap,
   } = useItineraryStore();
 
-  const pool = unassignedPlaces();
+  const pool = unassignedPlaces().filter((place) => place.category !== "hotel");
 
   const handleAdd = () => {
     addUnassignedPlace({

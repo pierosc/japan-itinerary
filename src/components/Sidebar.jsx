@@ -4,16 +4,16 @@ import ImportExport from "./ImportExport";
 import DaySelector from "./day/DaySelector";
 import FinancePanel from "./finance/FinancePanel";
 import MyPlacesPanel from "./MyPlacesPanel";
+import HotelsPanel from "./HotelsPanel";
 import SettingsPanel from "./SettingsPanel";
 import UsersPanel from "./UsersPanel";
 import PackingListPanel from "./PackingListPanel";
-import TimelinePanel from "./TimelinePanel";
 import { useItineraryStore } from "../hooks/useItineraryStore";
 
 const NAV_ITEMS = [
   { id: "itinerary", label: "Itinerario", short: "Plan", icon: "#" },
-  { id: "timeline", label: "Timeline", short: "Time", icon: "T" },
   { id: "myplaces", label: "My places", short: "Places", icon: "*" },
+  { id: "hotels", label: "Hoteles", short: "Hotel", icon: "H" },
   { id: "finance", label: "Gastos y finanzas", short: "Gastos", icon: "JPY" },
   { id: "packing", label: "Packing list", short: "Packing", icon: "[]" },
   { id: "users", label: "Users", short: "Users", icon: "@" },
@@ -25,7 +25,12 @@ export default function Sidebar({ trip, currentUser, onUpdateTripMeta }) {
   const setSidebarTab = useItineraryStore((state) => state.setSidebarTab);
   const storageMode = ui.storageMode || "online";
   const unassignedCount = useItineraryStore(
-    (state) => state.unassignedPlaces().length
+    (state) =>
+      state.unassignedPlaces().filter((place) => place.category !== "hotel")
+        .length
+  );
+  const hotelCount = useItineraryStore(
+    (state) => state.places.filter((place) => place.category === "hotel").length
   );
   const activeTab = NAV_ITEMS.some((item) => item.id === ui.sidebarTab)
     ? ui.sidebarTab
@@ -54,6 +59,8 @@ export default function Sidebar({ trip, currentUser, onUpdateTripMeta }) {
             <option key={item.id} value={item.id}>
               {item.id === "myplaces" && unassignedCount > 0
                 ? `${item.label} (${unassignedCount})`
+                : item.id === "hotels" && hotelCount > 0
+                ? `${item.label} (${hotelCount})`
                 : item.label}
             </option>
           ))}
@@ -78,6 +85,9 @@ export default function Sidebar({ trip, currentUser, onUpdateTripMeta }) {
               {item.id === "myplaces" && unassignedCount > 0 && (
                 <span className="sidebar-tab-count">{unassignedCount}</span>
               )}
+              {item.id === "hotels" && hotelCount > 0 && (
+                <span className="sidebar-tab-count">{hotelCount}</span>
+              )}
             </button>
           ))}
         </div>
@@ -94,15 +104,15 @@ export default function Sidebar({ trip, currentUser, onUpdateTripMeta }) {
         </div>
       )}
 
-      {activeTab === "timeline" && (
-        <section className="workspace-section sidebar-scroll-pane">
-          <TimelinePanel />
-        </section>
-      )}
-
       {activeTab === "myplaces" && (
         <section className="workspace-section sidebar-list-card">
           <MyPlacesPanel />
+        </section>
+      )}
+
+      {activeTab === "hotels" && (
+        <section className="workspace-section sidebar-list-card">
+          <HotelsPanel />
         </section>
       )}
 

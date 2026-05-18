@@ -24,11 +24,28 @@ function computeTripSummaryFromData(data) {
   return { days, places, packing, spendConverted, currencyCode };
 }
 
-export default function TripCard({ trip, onClick }) {
+export default function TripCard({
+  trip,
+  onClick,
+  onDuplicate,
+  duplicateDisabled,
+}) {
   const summary = computeTripSummaryFromData(trip.data);
+  const handleKeyDown = (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onClick?.();
+    }
+  };
 
   return (
-    <button className="trip-card" onClick={onClick}>
+    <div
+      className="trip-card"
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={handleKeyDown}
+    >
       <div className="trip-card-image-wrapper">
         {trip.coverImage ? (
           <img
@@ -44,10 +61,26 @@ export default function TripCard({ trip, onClick }) {
       </div>
 
       <div className="trip-card-body">
+        <div className="trip-card-bottom-actions">
+          <button
+            type="button"
+            className="trip-card-icon-action"
+            disabled={duplicateDisabled}
+            title="Duplicar viaje"
+            aria-label="Duplicar viaje"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDuplicate?.(trip);
+            }}
+          >
+            <span className="trip-card-copy-icon" aria-hidden="true" />
+          </button>
+        </div>
+
         <h3 className="trip-card-title">{trip.title}</h3>
 
         <div className="trip-card-meta">
-          <span>{summary.days} días</span>
+          <span>{summary.days} dias</span>
           <span>{summary.places} lugares</span>
           <span>{summary.packing} items</span>
           {summary.spendConverted !== null && (
@@ -59,6 +92,6 @@ export default function TripCard({ trip, onClick }) {
 
         {trip.destination && <span className="chip mt-1">{trip.destination}</span>}
       </div>
-    </button>
+    </div>
   );
 }
