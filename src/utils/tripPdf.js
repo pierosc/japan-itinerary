@@ -22,6 +22,7 @@ const CATEGORY_LABELS = {
   atraccion: "Atraccion",
   cafe: "Cafe",
   hotel: "Hotel",
+  airport: "Airport",
   otro: "Otro",
 };
 

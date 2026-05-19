@@ -53,7 +53,7 @@ export default function ItineraryList() {
   const [selectedLooseId, setSelectedLooseId] = useState("");
 
   const placesForDay = placesBySelectedDate().filter(
-    (place) => place.category !== "hotel"
+    (place) => place.category !== "hotel" || place.hotelEndpointRole
   );
   const routes = routesBySelectedDate();
   const pool = unassignedPlaces();
@@ -110,8 +110,19 @@ export default function ItineraryList() {
   }, [previewPlacesForDay, routes]);
 
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor));
-  const idsForDnd = previewPlacesForDay.map((place) => place.id);
-  const numFor = (placeId) => idsForDnd.indexOf(placeId) + 1;
+  const idsForDnd = previewPlacesForDay
+    .filter((place) => !isLockedAnchor(place))
+    .map((place) => place.id);
+  const numFor = (placeId) =>
+    previewPlacesForDay.findIndex((place) => place.id === placeId) + 1;
+
+  function isLockedAnchor(place) {
+    return (
+      (place.category === "airport" &&
+        ["arrival", "departure"].includes(place.airportRole)) ||
+      Boolean(place.hotelEndpointRole)
+    );
+  }
 
   function handleAddLooseToDay() {
     if (!selectedDate) {
@@ -169,11 +180,28 @@ export default function ItineraryList() {
     reorderPlacesForDate(selectedDate, arrayMove(idsForDnd, oldIndex, newIndex));
   }
 
+  function hasGeoPoint(place) {
+    return Number.isFinite(Number(place.lat)) && Number.isFinite(Number(place.lng));
+  }
+
+  function hasImagePoint(place) {
+    return (
+      Number.isFinite(Number(place.mapX)) && Number.isFinite(Number(place.mapY))
+    );
+  }
+
   function distMins(from, to, mode) {
     if (from.mapMode === "image" || to.mapMode === "image") {
+      if (!hasImagePoint(from) || !hasImagePoint(to)) {
+        return "Completa X/Y para calcular traslado";
+      }
       const dx = Number(from.mapX) - Number(to.mapX);
       const dy = Number(from.mapY) - Number(to.mapY);
       return `${Math.round(Math.sqrt(dx * dx + dy * dy))} px en el plano`;
+    }
+
+    if (!hasGeoPoint(from) || !hasGeoPoint(to)) {
+      return "Completa lat/lng para calcular traslado";
     }
 
     const distance = haversineKm(from, to);
@@ -188,7 +216,13 @@ export default function ItineraryList() {
     if (!from || !to) return;
 
     let geojson = null;
-    if (from.mapMode !== "image" && to.mapMode !== "image" && mode !== "train") {
+    if (
+      from.mapMode !== "image" &&
+      to.mapMode !== "image" &&
+      mode !== "train" &&
+      hasGeoPoint(from) &&
+      hasGeoPoint(to)
+    ) {
       try {
         const profile = mode === "walk" ? "foot" : "driving";
         const response = await fetch(
@@ -449,10 +483,17 @@ export default function ItineraryList() {
               }
 
               const place = block.place;
-              return (
-                <SortableItemWithHandle id={place.id} key={place.id}>
-                  {({ setNodeRef, style, handleProps }) => (
-                    <li ref={setNodeRef} style={{ ...style, listStyle: "none" }}>
+              const lockedAnchor = isLockedAnchor(place);
+              const renderPlace = ({
+                setNodeRef = undefined,
+                style = {},
+                handleProps = null,
+              } = {}) => (
+                <li
+                  key={place.id}
+                  ref={setNodeRef}
+                  style={{ ...style, listStyle: "none" }}
+                >
                       <div
                         className={`item ${
                           selectedId === place.id ? "active" : ""
@@ -498,62 +539,77 @@ export default function ItineraryList() {
                         </div>
 
                         <div className="itinerary-item-actions">
-                          <button
-                            className="icon-button itinerary-item-icon-button"
-                            title="Duplicar lugar"
-                            aria-label={`Duplicar ${place.name || "lugar"}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              const duplicateId = duplicatePlace(place.id);
-                              if (duplicateId) {
-                                setShowMap(Boolean(ui.showMap));
-                                toast({
-                                  title: "Lugar duplicado",
-                                  message: "Se agrego una copia al dia seleccionado.",
-                                  tone: "success",
-                                });
-                              }
-                            }}
-                          >
-                            <svg
-                              aria-hidden="true"
-                              focusable="false"
-                              viewBox="0 0 24 24"
-                              className="itinerary-copy-icon"
+                          {!lockedAnchor && (
+                            <>
+                              <button
+                                className="icon-button itinerary-item-icon-button"
+                                title="Duplicar lugar"
+                                aria-label={`Duplicar ${place.name || "lugar"}`}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  const duplicateId = duplicatePlace(place.id);
+                                  if (duplicateId) {
+                                    setShowMap(Boolean(ui.showMap));
+                                    toast({
+                                      title: "Lugar duplicado",
+                                      message:
+                                        "Se agrego una copia al dia seleccionado.",
+                                      tone: "success",
+                                    });
+                                  }
+                                }}
+                              >
+                                <svg
+                                  aria-hidden="true"
+                                  focusable="false"
+                                  viewBox="0 0 24 24"
+                                  className="itinerary-copy-icon"
+                                >
+                                  <rect
+                                    x="9"
+                                    y="9"
+                                    width="10"
+                                    height="10"
+                                    rx="2"
+                                  />
+                                  <path d="M5 15V7a2 2 0 0 1 2-2h8" />
+                                </svg>
+                              </button>
+                              <button
+                                className="btn-outline text-xs"
+                                title="Mover a My Places"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  unassignPlace(place.id);
+                                }}
+                              >
+                                A My Places
+                              </button>
+                            </>
+                          )}
+                          {handleProps && (
+                            <div
+                              {...handleProps}
+                              role="button"
+                              aria-label="Arrastrar"
+                              className="itinerary-handle"
+                              onClick={(event) => event.stopPropagation()}
                             >
-                              <rect
-                                x="9"
-                                y="9"
-                                width="10"
-                                height="10"
-                                rx="2"
-                              />
-                              <path d="M5 15V7a2 2 0 0 1 2-2h8" />
-                            </svg>
-                          </button>
-                          <button
-                            className="btn-outline text-xs"
-                            title="Mover a My Places"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              unassignPlace(place.id);
-                            }}
-                          >
-                            A My Places
-                          </button>
-                          <div
-                            {...handleProps}
-                            role="button"
-                            aria-label="Arrastrar"
-                            className="itinerary-handle"
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            <span>::</span>
-                          </div>
+                              <span>::</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </li>
-                  )}
+              );
+
+              if (lockedAnchor) {
+                return renderPlace();
+              }
+
+              return (
+                <SortableItemWithHandle id={place.id} key={place.id}>
+                  {renderPlace}
                 </SortableItemWithHandle>
               );
             })}

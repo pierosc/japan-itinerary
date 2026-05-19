@@ -14,8 +14,10 @@ const CATEGORIES = [
   "atraccion",
   "cafe",
   "hotel",
+  "airport",
   "otro",
 ];
+const DEFAULT_ANCHOR_TIME = "12:00";
 
 function imageNameFromUrl(url, fallback = "imagen") {
   try {
@@ -36,6 +38,20 @@ export default function PlaceEditor({ place, trip, currentUser }) {
 
   if (!place) return null;
 
+  const isAirportEndpoint =
+    place.category === "airport" &&
+    ["arrival", "departure"].includes(place.airportRole);
+  const isHotelEndpoint = Boolean(place.hotelEndpointRole);
+  const isLockedAnchor = isAirportEndpoint || isHotelEndpoint;
+  const timeLabel = isAirportEndpoint
+    ? place.airportRole === "arrival"
+      ? "Hora llegada vuelo"
+      : "Hora salida vuelo vuelta"
+    : isHotelEndpoint
+    ? place.hotelEndpointRole === "checkin"
+      ? "Hora check-in"
+      : "Hora check-out"
+    : "Inicio";
   const onNum = (v, fallback = 0) =>
     Number.isNaN(Number(v)) ? fallback : Number(v);
 
@@ -104,6 +120,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
               <select
                 className="input"
                 value={place.category || "otro"}
+                disabled={isLockedAnchor}
                 onChange={(e) =>
                   updatePlace(place.id, { category: e.target.value })
                 }
@@ -123,6 +140,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
                   type="date"
                   className="input"
                   value={place.date || ""}
+                  disabled={isLockedAnchor}
                   onChange={(e) =>
                     updatePlace(place.id, { date: e.target.value })
                   }
@@ -136,11 +154,14 @@ export default function PlaceEditor({ place, trip, currentUser }) {
           <div className="place-detail-section-title">Horario y costo</div>
           <div className="place-detail-grid">
             <label className="place-detail-field">
-              <span className="text-xs">Inicio</span>
+              <span className="text-xs">{timeLabel}</span>
               <input
                 className="input"
+                type={isLockedAnchor ? "time" : "text"}
                 placeholder="09:00"
-                value={place.startTime || ""}
+                value={
+                  place.startTime || (isLockedAnchor ? DEFAULT_ANCHOR_TIME : "")
+                }
                 onChange={(e) =>
                   updatePlace(place.id, { startTime: e.target.value })
                 }
@@ -190,7 +211,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
           </div>
         </section>
 
-        {place.category === "hotel" && (
+        {place.category === "hotel" && !isHotelEndpoint && (
           <section className="place-detail-section">
             <div className="place-detail-section-title">Estadia</div>
             <div className="place-detail-grid">
@@ -217,6 +238,30 @@ export default function PlaceEditor({ place, trip, currentUser }) {
                   value={place.checkOutDate || ""}
                   onChange={(e) =>
                     updatePlace(place.id, { checkOutDate: e.target.value })
+                  }
+                />
+              </label>
+
+              <label className="place-detail-field">
+                <span className="text-xs">Hora check-in</span>
+                <input
+                  type="time"
+                  className="input"
+                  value={place.checkInTime || DEFAULT_ANCHOR_TIME}
+                  onChange={(e) =>
+                    updatePlace(place.id, { checkInTime: e.target.value })
+                  }
+                />
+              </label>
+
+              <label className="place-detail-field">
+                <span className="text-xs">Hora check-out</span>
+                <input
+                  type="time"
+                  className="input"
+                  value={place.checkOutTime || DEFAULT_ANCHOR_TIME}
+                  onChange={(e) =>
+                    updatePlace(place.id, { checkOutTime: e.target.value })
                   }
                 />
               </label>
@@ -429,6 +474,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
         <PlaceItemsEditor place={place} trip={trip} currentUser={currentUser} />
       )}
 
+      {!isLockedAnchor && (
       <div className="place-danger-zone">
         <button
           className="btn-outline"
@@ -448,6 +494,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
           Eliminar punto
         </button>
       </div>
+      )}
 
       {menuOpen && place.menuImageUrl && (
         <MenuImageModal

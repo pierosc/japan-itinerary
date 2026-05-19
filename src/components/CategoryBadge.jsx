@@ -6,6 +6,7 @@ const map = {
   atraccion: { label: "Atracción", cls: "badge badge--attr" },
   cafe: { label: "Café", cls: "badge badge--cafe" },
   hotel: { label: "Hotel", cls: "badge badge--hotel" },
+  airport: { label: "Airport", cls: "badge badge--airport" },
   otro: { label: "Otro", cls: "badge badge--other" },
 };
 

@@ -825,6 +825,11 @@ body.theme-light .chip {
   border-color: #1a3a4b;
   color: #b7e7ff;
 }
+.badge--airport {
+  background: #101d2f;
+  border-color: #243f63;
+  color: #bfdbfe;
+}
 .badge--other {
   background: #1b222a;
   border-color: #2b3a49;
@@ -2284,7 +2289,8 @@ body.theme-light .badge--super,
 body.theme-light .badge--book,
 body.theme-light .badge--attr,
 body.theme-light .badge--cafe,
-body.theme-light .badge--hotel {
+body.theme-light .badge--hotel,
+body.theme-light .badge--airport {
   border-color: #d1d5db;
 }
 
@@ -2329,6 +2335,12 @@ body.theme-light .badge--hotel {
   background: #cffafe;
   border-color: #a5f3fc;
   color: #155e75;
+}
+
+body.theme-light .badge--airport {
+  background: #dbeafe;
+  border-color: #bfdbfe;
+  color: #1e3a8a;
 }
 
 body.theme-light .badge--other {

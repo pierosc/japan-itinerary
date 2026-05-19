@@ -5,6 +5,8 @@ function fallbackDate(days, index = 0) {
   return days[index] || days[0] || new Date().toISOString().slice(0, 10);
 }
 
+const DEFAULT_HOTEL_TIME = "12:00";
+
 export default function HotelsPanel() {
   const {
     places,
@@ -17,7 +19,10 @@ export default function HotelsPanel() {
   } = useItineraryStore();
 
   const hotels = useMemo(
-    () => places.filter((place) => place.category === "hotel"),
+    () =>
+      places.filter(
+        (place) => place.category === "hotel" && !place.hotelEndpointRole
+      ),
     [places]
   );
 
@@ -30,6 +35,8 @@ export default function HotelsPanel() {
       date: null,
       checkInDate,
       checkOutDate,
+      checkInTime: DEFAULT_HOTEL_TIME,
+      checkOutTime: DEFAULT_HOTEL_TIME,
       lat: 35.6804,
       lng: 139.769,
       durationMin: 0,
@@ -78,8 +85,10 @@ export default function HotelsPanel() {
               >
                 <span className="hotel-card-title">{hotel.name}</span>
                 <span className="text-xs">
-                  {hotel.checkInDate || "sin check-in"} hasta{" "}
-                  {hotel.checkOutDate || "sin check-out"}
+                  {hotel.checkInDate || "sin check-in"}{" "}
+                  {hotel.checkInTime || DEFAULT_HOTEL_TIME} hasta{" "}
+                  {hotel.checkOutDate || "sin check-out"}{" "}
+                  {hotel.checkOutTime || DEFAULT_HOTEL_TIME}
                 </span>
               </button>
 
@@ -116,6 +125,28 @@ export default function HotelsPanel() {
                     value={hotel.checkOutDate || ""}
                     onChange={(event) =>
                       updatePlace(hotel.id, { checkOutDate: event.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  <span className="text-xs">Hora check-in</span>
+                  <input
+                    className="input"
+                    type="time"
+                    value={hotel.checkInTime || DEFAULT_HOTEL_TIME}
+                    onChange={(event) =>
+                      updatePlace(hotel.id, { checkInTime: event.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  <span className="text-xs">Hora check-out</span>
+                  <input
+                    className="input"
+                    type="time"
+                    value={hotel.checkOutTime || DEFAULT_HOTEL_TIME}
+                    onChange={(event) =>
+                      updatePlace(hotel.id, { checkOutTime: event.target.value })
                     }
                   />
                 </label>

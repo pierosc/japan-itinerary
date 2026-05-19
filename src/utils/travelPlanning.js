@@ -183,6 +183,14 @@ function isMealPlace(place) {
   return ["restaurante", "cafe", "supermercado"].includes(place.category);
 }
 
+function isTripAnchor(place) {
+  return ["hotel", "airport"].includes(place.category);
+}
+
+function isBaseHotel(place) {
+  return place.category === "hotel" && !place.hotelEndpointRole;
+}
+
 function timeHour(place) {
   const match = String(place.startTime || "").match(/^(\d{1,2})/);
   if (!match) return null;
@@ -269,8 +277,8 @@ function orderNearestNeighbor(places, startPlace = null) {
 export function buildIntelligentDayPlan(places) {
   const warnings = [];
   const geoPlaces = places.filter(hasGeo);
-  const nonGeoPlaces = places.filter((place) => !hasGeo(place));
-  const hotel = geoPlaces.find((place) => place.category === "hotel") || null;
+  const nonGeoPlaces = places.filter((place) => !hasGeo(place) && !isTripAnchor(place));
+  const hotel = geoPlaces.find(isBaseHotel) || null;
   const fullDayPlaces = geoPlaces.filter(isFullDay);
   const regularPlaces = geoPlaces.filter((place) => {
     const isHotel = place.id === hotel?.id;
@@ -421,13 +429,15 @@ export function buildIntelligentTripPlan(places, days) {
   const realPlaces = places.filter((place) => !place.previewDate);
   const placesById = new Map(realPlaces.map((place) => [place.id, place]));
   const geoPlaces = realPlaces.filter(hasGeo);
-  const nonGeoPlaces = realPlaces.filter((place) => !hasGeo(place));
-  const hotels = geoPlaces.filter((place) => place.category === "hotel");
-  const visitPlaces = geoPlaces.filter((place) => place.category !== "hotel");
-  const nonGeoVisitPlaces = nonGeoPlaces.filter((place) => place.category !== "hotel");
+  const nonGeoPlaces = realPlaces.filter(
+    (place) => !hasGeo(place) && !isTripAnchor(place)
+  );
+  const hotels = geoPlaces.filter(isBaseHotel);
+  const visitPlaces = geoPlaces.filter((place) => !isTripAnchor(place));
+  const nonGeoVisitPlaces = nonGeoPlaces.filter((place) => !isTripAnchor(place));
   const orderedVisits = orderTripPlacesByDistance(visitPlaces, hotels);
   const totalVisitMinutes = realPlaces.reduce(
-    (sum, place) => (place.category === "hotel" ? sum : sum + minutesFor(place)),
+    (sum, place) => (isTripAnchor(place) ? sum : sum + minutesFor(place)),
     0
   );
   const targetDayMinutes = Math.max(

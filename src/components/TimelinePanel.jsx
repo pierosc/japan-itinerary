@@ -15,6 +15,11 @@ function timeFromMinutes(value) {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
+function durationFor(place) {
+  const duration = Number(place.durationMin);
+  return Number.isFinite(duration) ? duration : 60;
+}
+
 export default function TimelinePanel() {
   const {
     selectedDate,
@@ -32,7 +37,7 @@ export default function TimelinePanel() {
     let cursor = 9 * 60;
     return places.map((place, index) => {
       const start = minutesFromTime(place.startTime, cursor);
-      const duration = Number(place.durationMin) || 60;
+      const duration = durationFor(place);
       const route = routes.find((candidate) => candidate.fromId === place.id);
       cursor = start + duration + (Number(route?.durationMin) || 20);
 
@@ -83,7 +88,7 @@ export default function TimelinePanel() {
                 <div>
                   <div className="font-medium">{place.name}</div>
                   <div className="text-xs">
-                    {place.category || "otro"} · {place.durationMin || 60} min
+                    {place.category || "otro"} · {durationFor(place)} min
                   </div>
                   {Number(place.spendJPY) > 0 && (
                     <div className="text-xs">

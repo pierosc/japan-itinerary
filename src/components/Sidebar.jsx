@@ -30,7 +30,10 @@ export default function Sidebar({ trip, currentUser, onUpdateTripMeta }) {
         .length
   );
   const hotelCount = useItineraryStore(
-    (state) => state.places.filter((place) => place.category === "hotel").length
+    (state) =>
+      state.places.filter(
+        (place) => place.category === "hotel" && !place.hotelEndpointRole
+      ).length
   );
   const activeTab = NAV_ITEMS.some((item) => item.id === ui.sidebarTab)
     ? ui.sidebarTab
