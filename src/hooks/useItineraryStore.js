@@ -44,6 +44,8 @@ const AIRPORT_ROLES = {
 const HOTEL_ENDPOINT_LABELS = {
   checkin: "Check-in",
   checkout: "Check-out",
+  stayStart: "Hotel",
+  stayEnd: "Dormir",
 };
 
 function sortedUniqueDays(days) {
@@ -69,6 +71,10 @@ function isHotelEndpoint(place) {
   return place.category === "hotel" && Boolean(place.hotelEndpointRole);
 }
 
+function isLockedHotelEndpoint(place) {
+  return ["stayStart", "stayEnd"].includes(place.hotelEndpointRole);
+}
+
 function isBaseHotel(place) {
   return place.category === "hotel" && !isHotelEndpoint(place);
 }
@@ -77,7 +83,7 @@ function isLockedItineraryAnchor(place) {
   return (
     (place.category === AIRPORT_CATEGORY &&
       ["arrival", "departure"].includes(place.airportRole)) ||
-    isHotelEndpoint(place)
+    isLockedHotelEndpoint(place)
   );
 }
 
@@ -92,6 +98,18 @@ function hotelEndpointName(hotel, role) {
 
 function createHotelEndpoint(hotel, role) {
   const isCheckIn = role === "checkin";
+  const isCheckOut = role === "checkout";
+  const date = isCheckIn
+    ? hotel.checkInDate || hotel.date || null
+    : isCheckOut
+    ? hotel.checkOutDate || null
+    : null;
+  const startTime = isCheckIn
+    ? hotel.checkInTime || DEFAULT_ANCHOR_TIME
+    : isCheckOut
+    ? hotel.checkOutTime || DEFAULT_ANCHOR_TIME
+    : "";
+
   return {
     id: stableHotelEndpointId(hotel, role),
     type: "place",
@@ -99,10 +117,8 @@ function createHotelEndpoint(hotel, role) {
     hotelEndpointRole: role,
     hotelSourceId: hotel.id,
     name: hotelEndpointName(hotel, role),
-    date: isCheckIn ? hotel.checkInDate || hotel.date || null : hotel.checkOutDate || null,
-    startTime: isCheckIn
-      ? hotel.checkInTime || DEFAULT_ANCHOR_TIME
-      : hotel.checkOutTime || DEFAULT_ANCHOR_TIME,
+    date,
+    startTime,
     durationMin: 0,
     spendJPY: 0,
     lat: hotel.lat,
@@ -112,8 +128,33 @@ function createHotelEndpoint(hotel, role) {
     mapY: hotel.mapY,
     sourceUrl: hotel.sourceUrl,
     images: [],
-    notes: isCheckIn ? "Punto automatico de check-in." : "Punto automatico de check-out.",
+    notes:
+      role === "checkin"
+        ? "Punto automatico de check-in."
+        : role === "checkout"
+        ? "Punto automatico de check-out."
+        : "Punto automatico de hotel.",
   };
+}
+
+function createHotelStayEndpoint(hotel, role, date) {
+  return {
+    ...createHotelEndpoint(hotel, role),
+    id: stableHotelEndpointId(hotel, `${role}:${date}`),
+    date,
+  };
+}
+
+function hotelStayDates(hotel, days) {
+  const checkIn = hotel.checkInDate || hotel.date || "";
+  const checkOut = hotel.checkOutDate || "";
+  if (!checkIn) return [];
+
+  return days.filter((date) => {
+    if (date < checkIn) return false;
+    if (checkOut && date > checkOut) return false;
+    return true;
+  });
 }
 
 function pickAirportEndpoint(places, role, reservedIds) {
@@ -167,28 +208,68 @@ function normalizeBaseHotel(place) {
   };
 }
 
-function buildHotelEndpoints(places, days) {
+function buildHotelEndpoints(places, days, previousById = new Map()) {
   const activeDaySet = new Set(days);
   return places
     .filter(isBaseHotel)
     .flatMap((hotel) => {
       const endpoints = [];
-      if ((hotel.checkInDate || hotel.date) && activeDaySet.has(hotel.checkInDate || hotel.date)) {
+      const checkInDate = hotel.checkInDate || hotel.date || "";
+      const checkOutDate = hotel.checkOutDate || "";
+
+      if (checkInDate && activeDaySet.has(checkInDate)) {
         endpoints.push(createHotelEndpoint(hotel, "checkin"));
       }
-      if (hotel.checkOutDate && activeDaySet.has(hotel.checkOutDate)) {
+
+      if (checkOutDate && activeDaySet.has(checkOutDate)) {
         endpoints.push(createHotelEndpoint(hotel, "checkout"));
       }
+
+      hotelStayDates(hotel, days).forEach((date) => {
+        if (date !== checkInDate) {
+          endpoints.push(createHotelStayEndpoint(hotel, "stayStart", date));
+        }
+        if (!checkOutDate || date !== checkOutDate) {
+          endpoints.push(createHotelStayEndpoint(hotel, "stayEnd", date));
+        }
+      });
+
       return endpoints;
     })
-    .filter((endpoint) => endpoint.date);
+    .filter((endpoint) => endpoint.date)
+    .map((endpoint) => {
+      const previous = previousById.get(endpoint.id);
+      if (!previous) return endpoint;
+
+      return {
+        ...previous,
+        ...endpoint,
+      };
+    });
 }
 
-function orderPlacesWithAnchors(places, days) {
+function orderKeyForPlace(place, fallbackIndex, previousIndexById) {
+  const previousIndex = previousIndexById.get(place.id);
+  if (previousIndex != null) return previousIndex;
+
+  if (place.hotelEndpointRole === "stayStart") return -20 + fallbackIndex / 1000;
+  if (place.hotelEndpointRole === "checkin") return -10 + fallbackIndex / 1000;
+  if (place.hotelEndpointRole === "checkout") return -9 + fallbackIndex / 1000;
+  if (place.hotelEndpointRole === "stayEnd") return 100000 + fallbackIndex;
+
+  return fallbackIndex;
+}
+
+function orderPlacesWithAnchors(places, days, previousIndexById = new Map()) {
   const firstDate = days[0];
   const lastDate = days[days.length - 1];
   const arrival = places.find((place) => place.airportRole === "arrival");
   const departure = places.find((place) => place.airportRole === "departure");
+  const orderedInput = [...places].sort(
+    (a, b) =>
+      orderKeyForPlace(a, places.indexOf(a), previousIndexById) -
+      orderKeyForPlace(b, places.indexOf(b), previousIndexById)
+  );
   const ordered = [];
   const pushed = new Set();
 
@@ -198,15 +279,15 @@ function orderPlacesWithAnchors(places, days) {
       pushed.add(arrival.id);
     }
 
-    places.forEach((place) => {
+    orderedInput.forEach((place) => {
       if (pushed.has(place.id)) return;
       if (place.date !== date) return;
-      if (place.hotelEndpointRole !== "checkout") return;
+      if (place.hotelEndpointRole !== "stayStart") return;
       ordered.push(place);
       pushed.add(place.id);
     });
 
-    places.forEach((place) => {
+    orderedInput.forEach((place) => {
       if (pushed.has(place.id)) return;
       if (place.date !== date) return;
       if (place.id === arrival?.id || place.id === departure?.id) return;
@@ -215,10 +296,10 @@ function orderPlacesWithAnchors(places, days) {
       pushed.add(place.id);
     });
 
-    places.forEach((place) => {
+    orderedInput.forEach((place) => {
       if (pushed.has(place.id)) return;
       if (place.date !== date) return;
-      if (place.hotelEndpointRole !== "checkin") return;
+      if (place.hotelEndpointRole !== "stayEnd") return;
       ordered.push(place);
       pushed.add(place.id);
     });
@@ -229,7 +310,7 @@ function orderPlacesWithAnchors(places, days) {
     }
   });
 
-  places.forEach((place) => {
+  orderedInput.forEach((place) => {
     if (pushed.has(place.id)) return;
     ordered.push(place);
   });
@@ -251,8 +332,13 @@ function normalizeAirportEndpoints(state) {
   const safeDays = days.length ? days : [todayISO()];
   const firstDate = safeDays[0];
   const lastDate = safeDays[safeDays.length - 1];
-  const sourcePlaces = (Array.isArray(state.places) ? state.places : []).filter(
-    (place) => !isHotelEndpoint(place)
+  const statePlaces = Array.isArray(state.places) ? state.places : [];
+  const sourcePlaces = statePlaces.filter((place) => !isHotelEndpoint(place));
+  const previousHotelEndpointsById = new Map(
+    statePlaces.filter(isHotelEndpoint).map((place) => [place.id, place])
+  );
+  const previousIndexById = new Map(
+    statePlaces.map((place, index) => [place.id, index])
   );
   const reservedIds = new Set();
   let arrival = pickAirportEndpoint(sourcePlaces, "arrival", reservedIds);
@@ -293,8 +379,16 @@ function normalizeAirportEndpoints(state) {
   });
 
   const places = orderPlacesWithAnchors(
-    [...normalizedPlaces, ...buildHotelEndpoints(normalizedPlaces, safeDays)],
-    safeDays
+    [
+      ...normalizedPlaces,
+      ...buildHotelEndpoints(
+        normalizedPlaces,
+        safeDays,
+        previousHotelEndpointsById
+      ),
+    ],
+    safeDays,
+    previousIndexById
   );
   const validPlaceIds = new Set(places.map((place) => place.id));
   const selectedDate = safeDays.includes(state.selectedDate)
@@ -583,11 +677,29 @@ export const useItineraryStore = create((set, get) => ({
   },
 
   updatePlace: (id, patch) =>
-    set((s) =>
-      withAirportEndpoints(s, {
-        places: s.places.map((p) => (p.id === id ? { ...p, ...patch } : p)),
-      })
-    ),
+    set((s) => {
+      const place = s.places.find((p) => p.id === id);
+      const sourcePatch = {};
+
+      if (isHotelEndpoint(place) && place.hotelSourceId) {
+        if (place.hotelEndpointRole === "checkin") {
+          if (patch.startTime != null) sourcePatch.checkInTime = patch.startTime;
+          if (patch.date != null) sourcePatch.checkInDate = patch.date;
+        }
+        if (place.hotelEndpointRole === "checkout") {
+          if (patch.startTime != null) sourcePatch.checkOutTime = patch.startTime;
+          if (patch.date != null) sourcePatch.checkOutDate = patch.date;
+        }
+      }
+
+      return withAirportEndpoints(s, {
+        places: s.places.map((p) => {
+          if (p.id === id) return { ...p, ...patch };
+          if (p.id === place?.hotelSourceId) return { ...p, ...sourcePatch };
+          return p;
+        }),
+      });
+    }),
 
   removePlace: (id) =>
     set((s) =>
@@ -702,10 +814,11 @@ export const useItineraryStore = create((set, get) => ({
       const unmentioned = same.filter(
         (place) => !isLockedItineraryAnchor(place) && !orderedSet.has(place.id)
       );
-      const finalSame = orderPlacesWithAnchors(
-        [...locked, ...ordered, ...unmentioned],
-        [date]
+      const draftSame = [...locked, ...ordered, ...unmentioned];
+      const draftIndexById = new Map(
+        draftSame.map((place, index) => [place.id, index])
       );
+      const finalSame = orderPlacesWithAnchors(draftSame, [date], draftIndexById);
 
       const newPairs = new Set(
         finalSame
@@ -968,6 +1081,7 @@ export const useItineraryStore = create((set, get) => ({
       Array.isArray(data.days) && data.days.length
         ? data.days
         : [...new Set((data.places || []).map((p) => p.date).filter(Boolean))];
+    const importedDays = sortedUniqueDays(days.length ? days : [todayISO()]);
 
     const prevState = get();
     const prevUi = prevState.ui;
@@ -995,8 +1109,8 @@ export const useItineraryStore = create((set, get) => ({
       dayMaps: data.dayMaps || {},
       dayTitles: data.dayTitles || {},
       selectedId: null,
-      days: days.length ? days : [todayISO()],
-      selectedDate: data.selectedDate ?? days[0] ?? todayISO(),
+      days: importedDays,
+      selectedDate: importedDays[0],
       currency: prevState.currency || data.currency || defaultCurrency,
       ui: {
         ...prevUi,

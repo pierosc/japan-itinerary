@@ -357,8 +357,8 @@ export default function MapPanel({ trip, currentUser }) {
     }
   }
 
-  const handleMarkerClick = (id) => {
-    setSelected(id);
+  const handleMarkerClick = (place) => {
+    setSelected(place.id);
     setShowMap(true);
     setSidebarTab("itinerary");
   };
@@ -545,13 +545,13 @@ export default function MapPanel({ trip, currentUser }) {
               icon={selectedId === p.id ? SELECTED_ICON : DEFAULT_ICON}
               zIndexOffset={selectedId === p.id ? 1000 : 0}
               eventHandlers={{
-                click: () => handleMarkerClick(p.id),
+                click: () => handleMarkerClick(p),
                 dragend: (ev) => {
                   const { lat, lng } = ev.target.getLatLng();
                   updatePlace(p.id, { mapX: lng, mapY: lat });
                 },
               }}
-              draggable
+              draggable={p.category !== "hotel"}
             >
               <Popup>
                 <div>
@@ -603,13 +603,13 @@ export default function MapPanel({ trip, currentUser }) {
               icon={selectedId === p.id ? SELECTED_ICON : DEFAULT_ICON}
               zIndexOffset={selectedId === p.id ? 1000 : 0}
               eventHandlers={{
-                click: () => handleMarkerClick(p.id),
+                click: () => handleMarkerClick(p),
                 dragend: (ev) => {
                   const { lat, lng } = ev.target.getLatLng();
                   updatePlace(p.id, { lat, lng });
                 },
               }}
-              draggable
+              draggable={p.category !== "hotel"}
             >
               <Popup>
                 <div>

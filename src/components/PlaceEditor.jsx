@@ -17,6 +17,7 @@ const CATEGORIES = [
   "airport",
   "otro",
 ];
+const EDITABLE_CATEGORIES = CATEGORIES.filter((category) => category !== "hotel");
 const DEFAULT_ANCHOR_TIME = "12:00";
 
 function imageNameFromUrl(url, fallback = "imagen") {
@@ -43,6 +44,8 @@ export default function PlaceEditor({ place, trip, currentUser }) {
     ["arrival", "departure"].includes(place.airportRole);
   const isHotelEndpoint = Boolean(place.hotelEndpointRole);
   const isLockedAnchor = isAirportEndpoint || isHotelEndpoint;
+  const isReadOnlyHotel = isHotelEndpoint;
+  const categoryOptions = isLockedAnchor ? CATEGORIES : EDITABLE_CATEGORIES;
   const timeLabel = isAirportEndpoint
     ? place.airportRole === "arrival"
       ? "Hora llegada vuelo"
@@ -109,6 +112,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
               <input
                 className="input"
                 value={place.name || ""}
+                disabled={isReadOnlyHotel}
                 onChange={(e) =>
                   updatePlace(place.id, { name: e.target.value })
                 }
@@ -125,7 +129,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
                   updatePlace(place.id, { category: e.target.value })
                 }
               >
-                {CATEGORIES.map((c) => (
+                {categoryOptions.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
@@ -162,6 +166,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
                 value={
                   place.startTime || (isLockedAnchor ? DEFAULT_ANCHOR_TIME : "")
                 }
+                disabled={isReadOnlyHotel}
                 onChange={(e) =>
                   updatePlace(place.id, { startTime: e.target.value })
                 }
@@ -174,6 +179,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
                 type="number"
                 className="input"
                 value={place.durationMin ?? 60}
+                disabled={isReadOnlyHotel}
                 onChange={(e) =>
                   updatePlace(place.id, {
                     durationMin: onNum(e.target.value, 60),
@@ -188,6 +194,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
                 type="number"
                 className="input"
                 value={place.spendJPY ?? 0}
+                disabled={isReadOnlyHotel}
                 onChange={(e) =>
                   updatePlace(place.id, { spendJPY: onNum(e.target.value, 0) })
                 }
@@ -203,6 +210,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
                 className="input"
                 placeholder="gratis / yen / yen yen"
                 value={place.priceRange || ""}
+                disabled={isReadOnlyHotel}
                 onChange={(e) =>
                   updatePlace(place.id, { priceRange: e.target.value })
                 }
@@ -281,6 +289,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
                     step="1"
                     className="input"
                     value={Math.round(place.mapX ?? 0)}
+                    disabled={isReadOnlyHotel}
                     onChange={(e) =>
                       updatePlace(place.id, {
                         mapX: onNum(e.target.value, place.mapX),
@@ -295,6 +304,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
                     step="1"
                     className="input"
                     value={Math.round(place.mapY ?? 0)}
+                    disabled={isReadOnlyHotel}
                     onChange={(e) =>
                       updatePlace(place.id, {
                         mapY: onNum(e.target.value, place.mapY),
@@ -312,6 +322,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
                     step="0.000001"
                     className="input"
                     value={place.lat ?? ""}
+                    disabled={isReadOnlyHotel}
                     onChange={(e) =>
                       updatePlace(place.id, {
                         lat: onNum(e.target.value, place.lat),
@@ -326,6 +337,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
                     step="0.000001"
                     className="input"
                     value={place.lng ?? ""}
+                    disabled={isReadOnlyHotel}
                     onChange={(e) =>
                       updatePlace(place.id, {
                         lng: onNum(e.target.value, place.lng),
@@ -342,6 +354,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
                 className="input"
                 placeholder="https://..."
                 value={place.sourceUrl || ""}
+                disabled={isReadOnlyHotel}
                 onChange={(e) =>
                   updatePlace(place.id, { sourceUrl: e.target.value })
                 }
@@ -384,6 +397,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
               className="input place-notes-input"
               placeholder="Notas, reservas, horarios especiales..."
               value={place.notes || ""}
+              disabled={isReadOnlyHotel}
               onChange={(e) =>
                 updatePlace(place.id, { notes: e.target.value })
               }
@@ -404,9 +418,14 @@ export default function PlaceEditor({ place, trip, currentUser }) {
               className="input"
               placeholder="https://imagen.com/foto.jpg"
               value={imgUrl}
+              disabled={isReadOnlyHotel}
               onChange={(e) => setImgUrl(e.target.value)}
             />
-            <button className="btn" onClick={addImageFromUrl}>
+            <button
+              className="btn"
+              disabled={isReadOnlyHotel}
+              onClick={addImageFromUrl}
+            >
               Agregar URL
             </button>
           </div>
@@ -438,6 +457,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
                         className="input"
                         value={src}
                         placeholder="https://imagen.com/foto.jpg"
+                        disabled={isReadOnlyHotel}
                         onChange={(e) =>
                           updateImage(i, { url: e.target.value })
                         }
@@ -457,6 +477,7 @@ export default function PlaceEditor({ place, trip, currentUser }) {
                       )}
                       <button
                         className="btn-outline"
+                        disabled={isReadOnlyHotel}
                         onClick={() => removeImage(i)}
                       >
                         Quitar

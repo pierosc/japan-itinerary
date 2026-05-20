@@ -56,7 +56,7 @@ export default function ItineraryList() {
     (place) => place.category !== "hotel" || place.hotelEndpointRole
   );
   const routes = routesBySelectedDate();
-  const pool = unassignedPlaces();
+  const pool = unassignedPlaces().filter((place) => place.category !== "hotel");
   const hasImageMap = Boolean(dayMaps?.[selectedDate]?.imageUrl);
   const canAddLoose = Boolean(selectedDate) && Boolean(selectedLooseId);
   const smartPlan = useMemo(
@@ -120,8 +120,13 @@ export default function ItineraryList() {
     return (
       (place.category === "airport" &&
         ["arrival", "departure"].includes(place.airportRole)) ||
-      Boolean(place.hotelEndpointRole)
+      ["stayStart", "stayEnd"].includes(place.hotelEndpointRole)
     );
+  }
+
+  function selectPlaceFromItinerary(place, showMap) {
+    setSelected(place.id);
+    setShowMap(showMap);
   }
 
   function handleAddLooseToDay() {
@@ -484,6 +489,8 @@ export default function ItineraryList() {
 
               const place = block.place;
               const lockedAnchor = isLockedAnchor(place);
+              const canUsePlaceActions =
+                !lockedAnchor && !place.hotelEndpointRole;
               const renderPlace = ({
                 setNodeRef = undefined,
                 style = {},
@@ -499,12 +506,10 @@ export default function ItineraryList() {
                           selectedId === place.id ? "active" : ""
                         }`}
                         onClick={() => {
-                          setSelected(place.id);
-                          setShowMap(Boolean(ui.showMap));
+                          selectPlaceFromItinerary(place, Boolean(ui.showMap));
                         }}
                         onDoubleClick={() => {
-                          setSelected(place.id);
-                          setShowMap(false);
+                          selectPlaceFromItinerary(place, false);
                         }}
                         style={{ cursor: "pointer" }}
                       >
@@ -539,7 +544,7 @@ export default function ItineraryList() {
                         </div>
 
                         <div className="itinerary-item-actions">
-                          {!lockedAnchor && (
+                          {canUsePlaceActions && (
                             <>
                               <button
                                 className="icon-button itinerary-item-icon-button"

@@ -5,7 +5,8 @@ import ImageCarousel from "./media/ImageCarousel";
 import PlaceEditor from "./PlaceEditor";
 
 export default function SelectedPlaceView({ trip, currentUser }) {
-  const { places, selectedId, setShowMap, setSelected } = useItineraryStore();
+  const { places, selectedId, setShowMap, setSelected, setSidebarTab } =
+    useItineraryStore();
   const place = useMemo(
     () => places.find((p) => p.id === selectedId),
     [places, selectedId]
@@ -43,9 +44,27 @@ export default function SelectedPlaceView({ trip, currentUser }) {
         height={260}
       />
 
-      {/* Editor completo de configuraciones */}
       <div className="card mt-3">
-        <PlaceEditor place={place} trip={trip} currentUser={currentUser} />
+        {place.category === "hotel" && !place.hotelEndpointRole ? (
+          <div className="empty-state">
+            <div className="font-medium">Este hotel se edita desde Hotel</div>
+            <div className="text-xs">
+              Usa la pestaña Hotel para cambiar nombre, fechas, horarios y
+              ubicación.
+            </div>
+            <button
+              className="btn-outline"
+              onClick={() => {
+                setSidebarTab("hotels");
+                setShowMap(true);
+              }}
+            >
+              Ir a Hotel
+            </button>
+          </div>
+        ) : (
+          <PlaceEditor place={place} trip={trip} currentUser={currentUser} />
+        )}
       </div>
     </div>
   );

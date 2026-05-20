@@ -14,8 +14,6 @@ export default function HotelsPanel() {
     addUnassignedPlace,
     updatePlace,
     removePlace,
-    setSelected,
-    setShowMap,
   } = useItineraryStore();
 
   const hotels = useMemo(
@@ -42,8 +40,7 @@ export default function HotelsPanel() {
       durationMin: 0,
       notes: "",
     });
-    setSelected(id);
-    setShowMap(false);
+    return id;
   };
 
   return (
@@ -76,13 +73,7 @@ export default function HotelsPanel() {
         <ul className="list scroll-list hotel-list">
           {hotels.map((hotel) => (
             <li key={hotel.id} className="hotel-card">
-              <button
-                className="hotel-card-main"
-                onClick={() => {
-                  setSelected(hotel.id);
-                  setShowMap(false);
-                }}
-              >
+              <div className="hotel-card-main">
                 <span className="hotel-card-title">{hotel.name}</span>
                 <span className="text-xs">
                   {hotel.checkInDate || "sin check-in"}{" "}
@@ -90,7 +81,7 @@ export default function HotelsPanel() {
                   {hotel.checkOutDate || "sin check-out"}{" "}
                   {hotel.checkOutTime || DEFAULT_HOTEL_TIME}
                 </span>
-              </button>
+              </div>
 
               <div className="hotel-fields">
                 <label>
@@ -177,15 +168,6 @@ export default function HotelsPanel() {
               </div>
 
               <div className="hotel-actions">
-                <button
-                  className="btn-outline text-xs"
-                  onClick={() => {
-                    setSelected(hotel.id);
-                    setShowMap(false);
-                  }}
-                >
-                  Editar detalle
-                </button>
                 <button
                   className="btn-outline text-xs"
                   onClick={() => removePlace(hotel.id)}
