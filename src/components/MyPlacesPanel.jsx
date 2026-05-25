@@ -50,19 +50,19 @@ export default function MyPlacesPanel() {
   };
 
   return (
-    <div className="list-panel my-places-panel">
-      <div className="section-heading">
+    <div className="list-panel my-places-panel" data-tour="myplaces-panel">
+      <div className="section-heading" data-tour="myplaces-actions">
         <div>
           <h2 className="font-semibold">My places</h2>
           <div className="text-xs">{pool.length} lugar/es sin día asignado</div>
         </div>
-        <button className="btn" onClick={handleAdd}>
+        <button className="btn" onClick={handleAdd} data-tour="myplaces-add">
           + Añadir lugar
         </button>
       </div>
 
       {!pool.length ? (
-        <div className="empty-state empty-state--rich">
+        <div className="empty-state empty-state--rich" data-tour="myplaces-list">
           <div className="empty-state-kicker">Ideas pendientes</div>
           <div className="font-medium">No tienes lugares sueltos</div>
           <div className="text-xs">
@@ -80,7 +80,7 @@ export default function MyPlacesPanel() {
             actual del itinerario.
           </p>
 
-          <ul className="list scroll-list my-places-list">
+          <ul className="list scroll-list my-places-list" data-tour="myplaces-list">
             {pool.map((place) => (
               <li key={place.id} className="my-place-card">
                 <button

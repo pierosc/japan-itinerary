@@ -380,6 +380,13 @@ button:disabled {
   color: var(--brand);
   background: color-mix(in srgb, var(--brand) 8%, var(--panel));
 }
+.planner-help-button {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  font-size: 17px;
+}
 .icon-button-danger:hover {
   border-color: var(--danger);
   color: var(--danger);
@@ -892,6 +899,21 @@ body.theme-light .chip {
 .landing-new-trip-button {
   white-space: nowrap;
 }
+.landing-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.landing-view-tabs {
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 88%, var(--bg));
+}
 .landing-new-trip-card {
   max-width: 800px;
 }
@@ -939,6 +961,13 @@ body.theme-light .chip {
   }
   .landing-new-trip-form {
     grid-template-columns: 1fr;
+  }
+  .landing-header-actions,
+  .landing-view-tabs {
+    width: 100%;
+  }
+  .landing-view-tabs .btn-outline {
+    flex: 1;
   }
   .landing-new-trip-actions {
     grid-column: span 1;
@@ -1187,6 +1216,12 @@ body.theme-light .trip-card-image--placeholder {
   font-weight: 850;
   color: #fff;
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.42);
+}
+.trip-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 .trip-card-subtitle {
   font-size: 12px;
@@ -1609,6 +1644,56 @@ body:not(.theme-light) .map-ui-overlay {
   color: var(--muted);
   background: color-mix(in srgb, var(--bg) 72%, var(--panel));
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+}
+
+.trip-tour-popover.driver-popover {
+  max-width: min(360px, calc(100vw - 28px));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.26);
+}
+
+.trip-tour-popover .driver-popover-title {
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.trip-tour-popover .driver-popover-description {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.trip-tour-popover .driver-popover-progress-text {
+  color: var(--muted);
+}
+
+.trip-tour-popover .driver-popover-footer button {
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--panel) 86%, var(--bg));
+  color: var(--text);
+  font-weight: 800;
+  text-shadow: none;
+}
+
+.trip-tour-popover .driver-popover-footer button:hover {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 10%, var(--panel));
+}
+
+.trip-tour-popover .driver-popover-footer .driver-popover-next-btn {
+  border-color: var(--brand-600);
+  background: var(--brand);
+  color: #fff;
+}
+
+.trip-tour-popover .driver-popover-footer .driver-popover-next-btn:hover {
+  background: var(--brand-600);
+  color: #fff;
 }
 
 .currency-selector {
@@ -2479,6 +2564,18 @@ body.theme-light .badge--other {
   color: var(--text);
 }
 
+.public-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0 14px;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  backdrop-filter: blur(10px);
+}
+
 .public-hero {
   min-height: 44vh;
   display: flex;
@@ -2509,7 +2606,37 @@ body.theme-light .badge--other {
   margin: 0 auto;
   display: grid;
   gap: 16px;
-  padding: 28px 16px 60px;
+  padding: 18px 16px 30px;
+}
+
+.public-summary {
+  max-width: 980px;
+  margin: 18px auto 0;
+  padding: 0 16px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.public-summary > div {
+  min-height: 82px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--panel);
+}
+
+.public-summary strong {
+  font-size: 20px;
+}
+
+.public-summary span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .public-day {
@@ -2528,15 +2655,97 @@ body.theme-light .badge--other {
 
 .public-place-list {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   margin: 12px 0 0;
-  padding-left: 20px;
+  padding: 0;
+  list-style: none;
 }
 
-.public-place-list li span {
-  margin-left: 8px;
+.public-place-card {
+  display: grid;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 12px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--panel) 82%, var(--bg));
+}
+
+.public-place-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.public-place-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.public-route-line {
+  margin: 8px 0 0 18px;
+  padding: 7px 10px;
+  border-left: 2px solid var(--border);
   color: var(--muted);
   font-size: 12px;
+}
+
+.public-image-strip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.public-image-strip img {
+  width: 92px;
+  height: 68px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.public-extra-grid {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 0 16px 60px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.public-extra-card {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+  background: var(--panel);
+}
+
+.public-detail-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.public-detail-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 64%, transparent);
+}
+
+.public-detail-list li:last-child {
+  border-bottom: 0;
+}
+
+.public-detail-list li span {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
 }
 
 @media (max-width: 760px) {
@@ -2556,5 +2765,17 @@ body.theme-light .badge--other {
   .timeline-time {
     grid-template-columns: auto auto;
     justify-content: start;
+  }
+
+  .public-summary,
+  .public-extra-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .public-day-header,
+  .public-topbar,
+  .public-place-title {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

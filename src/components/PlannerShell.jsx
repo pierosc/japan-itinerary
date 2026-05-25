@@ -3,6 +3,7 @@ import MapPanel from "./MapPanel";
 import Sidebar from "./Sidebar";
 import PlannerAppBar from "./PlannerAppBar";
 import { useItineraryStore } from "../hooks/useItineraryStore";
+import { useTripTour } from "../hooks/useTripTour";
 
 export default function PlannerShell({
   trip,
@@ -13,8 +14,10 @@ export default function PlannerShell({
   saveState,
   saveMessage,
   onUpdateTripMeta,
+  onUpdateTripVisibility,
 }) {
   const ui = useItineraryStore((s) => s.ui);
+  const startTripTour = useTripTour();
   const storageMode = ui.storageMode || "online";
   const autoSaveEnabled = ui.autoSaveEnabled !== false;
   const autoSaveIntervalMin = ui.autoSaveIntervalMin ?? 3;
@@ -36,10 +39,11 @@ export default function PlannerShell({
         onSaveNow={onSave}
         saveState={saveState || "idle"}
         saveMessage={saveMessage || defaultStatus}
+        onStartTour={startTripTour}
       />
 
-      <div className="planner-main h-full">
-        <div className="panel map-panel-wrap">
+      <div className="planner-main h-full" data-tour="trip-workspace">
+        <div className="panel map-panel-wrap" data-tour="trip-map">
           <div className="h-full">
             <MapPanel trip={trip} currentUser={currentUser} />
           </div>
@@ -51,6 +55,7 @@ export default function PlannerShell({
               trip={trip}
               currentUser={currentUser}
               onUpdateTripMeta={onUpdateTripMeta}
+              onUpdateTripVisibility={onUpdateTripVisibility}
             />
           </div>
         </div>

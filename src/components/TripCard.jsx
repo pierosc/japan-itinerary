@@ -29,6 +29,8 @@ export default function TripCard({
   onClick,
   onDuplicate,
   duplicateDisabled,
+  badgeLabel,
+  duplicateTitle = "Duplicar viaje",
 }) {
   const summary = computeTripSummaryFromData(trip.data);
   const handleKeyDown = (event) => {
@@ -66,8 +68,8 @@ export default function TripCard({
             type="button"
             className="trip-card-icon-action"
             disabled={duplicateDisabled}
-            title="Duplicar viaje"
-            aria-label="Duplicar viaje"
+            title={duplicateTitle}
+            aria-label={duplicateTitle}
             onClick={(event) => {
               event.stopPropagation();
               onDuplicate?.(trip);
@@ -76,6 +78,12 @@ export default function TripCard({
             <span className="trip-card-copy-icon" aria-hidden="true" />
           </button>
         </div>
+
+        {(badgeLabel || trip.isPublic) && (
+          <div className="trip-card-badges">
+            <span className="chip">{badgeLabel || "Público"}</span>
+          </div>
+        )}
 
         <h3 className="trip-card-title">{trip.title}</h3>
 

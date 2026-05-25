@@ -16,7 +16,7 @@ export default function PackingListPanel() {
   };
 
   return (
-    <div className="list-panel">
+    <div className="list-panel" data-tour="packing-panel">
       <div>
         <h2 className="font-semibold mb-1">Packing list</h2>
         <p className="text-xs text-gray-600">
@@ -24,7 +24,7 @@ export default function PackingListPanel() {
         </p>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2" data-tour="packing-actions">
         <input
           className="input"
           placeholder="Añadir ítem (p. ej. paraguas)..."
@@ -39,7 +39,7 @@ export default function PackingListPanel() {
         </button>
       </div>
 
-      <ul className="list scroll-list">
+      <ul className="list scroll-list" data-tour="packing-list">
         {items.map((item) => (
           <li
             key={item.id}

@@ -134,18 +134,114 @@ function OnboardingPanel({ onCreate }) {
 
 export default function LandingPage({
   trips,
+  publicTrips = [],
   onEnterTrip,
+  onEnterPublicTrip,
   onAddTrip,
   onDuplicateTrip,
   duplicatingTripId,
   loading,
+  loadingPublic,
   error,
+  publicError,
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [activeView, setActiveView] = useState("mine");
 
   const handleCreate = (data) => {
     onAddTrip(data);
     setDialogOpen(false);
+  };
+
+  const renderMine = () => {
+    if (error) {
+      return (
+        <div className="empty-state empty-state--rich">
+          <div className="empty-state-kicker">No pudimos cargar</div>
+          <div className="font-semibold">Error al traer tus viajes</div>
+          <div className="text-xs">{error}</div>
+        </div>
+      );
+    }
+
+    if (loading) {
+      return (
+        <div className="trips-grid" style={{ marginTop: 12 }}>
+          {[0, 1, 2].map((item) => (
+            <div key={item} className="trip-card trip-card--skeleton" />
+          ))}
+        </div>
+      );
+    }
+
+    if (trips.length === 0) {
+      return <OnboardingPanel onCreate={() => setDialogOpen(true)} />;
+    }
+
+    return (
+      <div className="trips-grid" style={{ marginTop: 12 }}>
+        {trips.map((trip) => (
+          <TripCard
+            key={trip.id}
+            trip={trip}
+            onClick={() => onEnterTrip(trip.id)}
+            onDuplicate={onDuplicateTrip}
+            duplicateDisabled={duplicatingTripId === trip.id}
+          />
+        ))}
+      </div>
+    );
+  };
+
+  const renderPublic = () => {
+    if (publicError) {
+      return (
+        <div className="empty-state empty-state--rich">
+          <div className="empty-state-kicker">No pudimos cargar</div>
+          <div className="font-semibold">Error al traer viajes públicos</div>
+          <div className="text-xs">{publicError}</div>
+        </div>
+      );
+    }
+
+    if (loadingPublic) {
+      return (
+        <div className="trips-grid" style={{ marginTop: 12 }}>
+          {[0, 1, 2].map((item) => (
+            <div key={item} className="trip-card trip-card--skeleton" />
+          ))}
+        </div>
+      );
+    }
+
+    if (publicTrips.length === 0) {
+      return (
+        <div className="empty-state empty-state--rich">
+          <div className="empty-state-kicker">Viajes públicos</div>
+          <div className="font-semibold">Aún no hay viajes publicados</div>
+          <div className="text-xs">
+            Cuando alguien publique un viaje desde Configuración, aparecerá
+            aquí en modo solo lectura.
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="trips-grid" style={{ marginTop: 12 }}>
+        {publicTrips.map((trip) => (
+          <TripCard
+            key={trip.id}
+            trip={trip}
+            badgeLabel="Público"
+            duplicateTitle="Copiar viaje"
+            onClick={() => onEnterPublicTrip?.(trip)}
+            onDuplicate={onDuplicateTrip}
+            duplicateDisabled={duplicatingTripId === trip.id}
+          />
+        ))}
+      </div>
+    );
   };
 
   return (
@@ -158,42 +254,45 @@ export default function LandingPage({
           </div>
         </div>
 
-        <button
-          className="btn landing-new-trip-button"
-          onClick={() => setDialogOpen(true)}
-        >
-          + Nuevo viaje
-        </button>
+        <div className="landing-header-actions">
+          <div className="landing-view-tabs" role="tablist" aria-label="Viajes">
+            <button
+              className={
+                "btn-outline text-xs " +
+                (activeView === "mine" ? "btn-active" : "")
+              }
+              onClick={() => setActiveView("mine")}
+              role="tab"
+              aria-selected={activeView === "mine"}
+            >
+              Mis viajes
+            </button>
+            <button
+              className={
+                "btn-outline text-xs " +
+                (activeView === "public" ? "btn-active" : "")
+              }
+              onClick={() => setActiveView("public")}
+              role="tab"
+              aria-selected={activeView === "public"}
+            >
+              Viajes públicos
+            </button>
+          </div>
+
+          {activeView === "mine" && (
+            <button
+              className="btn landing-new-trip-button"
+              onClick={() => setDialogOpen(true)}
+            >
+              + Nuevo viaje
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="landing-trips-section">
-        {error ? (
-          <div className="empty-state empty-state--rich">
-            <div className="empty-state-kicker">No pudimos cargar</div>
-            <div className="font-semibold">Error al traer tus viajes</div>
-            <div className="text-xs">{error}</div>
-          </div>
-        ) : loading ? (
-          <div className="trips-grid" style={{ marginTop: 12 }}>
-            {[0, 1, 2].map((item) => (
-              <div key={item} className="trip-card trip-card--skeleton" />
-            ))}
-          </div>
-        ) : trips.length === 0 ? (
-          <OnboardingPanel onCreate={() => setDialogOpen(true)} />
-        ) : (
-          <div className="trips-grid" style={{ marginTop: 12 }}>
-            {trips.map((trip) => (
-              <TripCard
-                key={trip.id}
-                trip={trip}
-                onClick={() => onEnterTrip(trip.id)}
-                onDuplicate={onDuplicateTrip}
-                duplicateDisabled={duplicatingTripId === trip.id}
-              />
-            ))}
-          </div>
-        )}
+        {activeView === "mine" ? renderMine() : renderPublic()}
       </div>
 
       <NewTripDialog

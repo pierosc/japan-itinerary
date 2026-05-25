@@ -6,12 +6,16 @@ import PublicTripPage from "./components/PublicTripPage";
 import { useItineraryStore } from "./hooks/useItineraryStore";
 import { supabase } from "./components/lib/supabaseClient";
 import {
+  loadTripIndexLocal,
   loadTripLocal,
   saveTripLocal,
+  upsertTripMetaLocal,
 } from "./components/lib/localStorageAdapter";
 import {
+  fetchPublicTripsOnline,
   fetchTripsOnline,
   saveTripOnline,
+  updateTripVisibilityOnline,
 } from "./components/services/tripService";
 import { syncCurrentUserProfile } from "./components/services/userService";
 import { useFeedback } from "./components/ui/FeedbackProvider";
@@ -77,26 +81,47 @@ function stripBase64FromExport(data) {
   };
 }
 
+function loadTripsLocal() {
+  return loadTripIndexLocal().map((trip) => ({
+    ...trip,
+    data: loadTripLocal(trip.id),
+  }));
+}
+
 export default function App({ auth }) {
   const { isSignedIn, isLoaded, user, hasClerk, supabaseReady = true } = auth;
   const { toast } = useFeedback();
 
   const theme = useItineraryStore((state) => state.ui.theme);
   const storageMode = useItineraryStore((state) => state.ui.storageMode);
+  const autoSaveEnabled = useItineraryStore(
+    (state) => state.ui.autoSaveEnabled
+  );
+  const autoSaveIntervalMin = useItineraryStore(
+    (state) => state.ui.autoSaveIntervalMin
+  );
   const exportJSON = useItineraryStore((state) => state.exportJSON);
   const importJSON = useItineraryStore((state) => state.importJSON);
   const clearAll = useItineraryStore((state) => state.clearAll);
 
   const [guest, setGuest] = useState(false);
   const [trips, setTrips] = useState([]);
+  const [publicTrips, setPublicTrips] = useState([]);
   const [activeTripId, setActiveTripId] = useState(null);
+  const [activePublicTrip, setActivePublicTrip] = useState(null);
   const [loadingTrips, setLoadingTrips] = useState(false);
   const [tripsError, setTripsError] = useState(null);
+  const [loadingPublicTrips, setLoadingPublicTrips] = useState(false);
+  const [publicTripsError, setPublicTripsError] = useState(null);
+  const [publicTripsRefreshKey, setPublicTripsRefreshKey] = useState(0);
   const [saveState, setSaveState] = useState("idle");
   const [saveMessage, setSaveMessage] = useState("");
   const [duplicatingTripId, setDuplicatingTripId] = useState(null);
 
   const savingRef = useRef(false);
+  const activeTripRef = useRef(null);
+  const metaSaveTimeoutRef = useRef(null);
+  const previousStorageModeRef = useRef(storageMode);
   const canEnter = isSignedIn || guest;
   const isPublicView =
     typeof window !== "undefined" && window.location.hash.startsWith("#public=");
@@ -107,12 +132,35 @@ export default function App({ auth }) {
   );
 
   useEffect(() => {
+    activeTripRef.current = activeTrip;
+  }, [activeTrip]);
+
+  useEffect(() => {
+    return () => {
+      if (metaSaveTimeoutRef.current) {
+        clearTimeout(metaSaveTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (typeof document === "undefined") return;
     document.body.classList.toggle("theme-light", theme === "light");
   }, [theme]);
 
   useEffect(() => {
-    if (!isLoaded || !supabaseReady) return;
+    const previousStorageMode = previousStorageModeRef.current;
+    previousStorageModeRef.current = storageMode;
+
+    if (!activeTrip) return;
+    if (storageMode !== "local" || previousStorageMode === "local") return;
+
+    performSave({ silent: true, tripOverride: activeTripRef.current });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTrip, storageMode]);
+
+  useEffect(() => {
+    if (!isLoaded || !supabaseReady || storageMode !== "online") return;
 
     if (!isSignedIn || !user || !supabase) {
       setTrips([]);
@@ -142,7 +190,52 @@ export default function App({ auth }) {
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, isSignedIn, supabaseReady, user]);
+  }, [isLoaded, isSignedIn, storageMode, supabaseReady, user]);
+
+  useEffect(() => {
+    if (!isLoaded || !canEnter || storageMode !== "local" || activeTripId) {
+      return;
+    }
+
+    setTrips(loadTripsLocal());
+    setLoadingTrips(false);
+    setTripsError(null);
+  }, [activeTripId, canEnter, isLoaded, storageMode]);
+
+  useEffect(() => {
+    if (!isLoaded || !supabaseReady || !canEnter) return;
+
+    if (!supabase) {
+      setPublicTrips([]);
+      setLoadingPublicTrips(false);
+      setPublicTripsError("Supabase no configurado.");
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingPublicTrips(true);
+    setPublicTripsError(null);
+
+    (async () => {
+      const result = await fetchPublicTripsOnline();
+      if (cancelled) return;
+
+      if (!result.ok) {
+        setPublicTrips([]);
+        setPublicTripsError(
+          result.error?.message || "Error cargando viajes públicos."
+        );
+      } else {
+        setPublicTrips(result.trips);
+      }
+
+      setLoadingPublicTrips(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canEnter, isLoaded, publicTripsRefreshKey, supabaseReady]);
 
   useEffect(() => {
     if (!isLoaded || !supabaseReady || !isSignedIn || !user?.id || !supabase) {
@@ -170,10 +263,22 @@ export default function App({ auth }) {
       data: null,
       ownerUserId: user?.id ?? null,
       sharedWithUserIds: [],
+      isPublic: false,
     };
 
     setTrips((currentTrips) => [newTrip, ...currentTrips]);
+    setActivePublicTrip(null);
     setActiveTripId(id);
+
+    if (storageMode === "local") {
+      try {
+        const dataSnapshot = stripBase64FromExport(JSON.parse(exportJSON()));
+        saveTripLocal(id, dataSnapshot);
+        upsertTripMetaLocal({ ...newTrip, data: dataSnapshot });
+      } catch (error) {
+        console.error("Error creando viaje local", error);
+      }
+    }
   };
 
   const cloneTripData = (data) => {
@@ -181,7 +286,7 @@ export default function App({ auth }) {
     return JSON.parse(JSON.stringify(data));
   };
 
-  const handleDuplicateTrip = async (trip) => {
+  const handleDuplicateTrip = async (trip, { openCopy = false } = {}) => {
     if (!trip || duplicatingTripId) return;
 
     const id = `trip-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
@@ -198,8 +303,21 @@ export default function App({ auth }) {
       title: `${trip.title || "Sin titulo"} (copia)`,
       updatedAt: now,
       data,
-      ownerUserId: user?.id ?? trip.ownerUserId ?? null,
+      ownerUserId: user?.id ?? null,
       sharedWithUserIds: [],
+      isPublic: false,
+    };
+
+    const openDuplicatedTrip = () => {
+      if (data) {
+        try {
+          importJSON(JSON.stringify(data));
+        } catch (error) {
+          console.error("Error importando copia", error);
+        }
+      }
+      setActivePublicTrip(null);
+      setActiveTripId(id);
     };
 
     setDuplicatingTripId(trip.id);
@@ -208,7 +326,9 @@ export default function App({ auth }) {
     try {
       if (storageMode === "local") {
         if (data) saveTripLocal(id, data);
+        upsertTripMetaLocal(duplicatedTrip);
         toast({ title: "Viaje duplicado", tone: "success" });
+        if (openCopy) openDuplicatedTrip();
         return;
       }
 
@@ -218,6 +338,7 @@ export default function App({ auth }) {
           message: "Inicia sesion o usa modo local para conservarlo.",
           tone: "warning",
         });
+        if (openCopy) openDuplicatedTrip();
         return;
       }
 
@@ -226,6 +347,7 @@ export default function App({ auth }) {
         userId: user.id,
         ownerUserId: user.id,
         sharedWithUserIds: [],
+        isPublic: false,
         data: data || {},
         title: duplicatedTrip.title,
         destination: duplicatedTrip.destination,
@@ -245,6 +367,7 @@ export default function App({ auth }) {
       }
 
       toast({ title: "Viaje duplicado", tone: "success" });
+      if (openCopy) openDuplicatedTrip();
     } finally {
       setDuplicatingTripId(null);
     }
@@ -276,18 +399,211 @@ export default function App({ auth }) {
   };
 
   const handleUpdateTripMeta = (patch) => {
-    if (!activeTripId) return;
+    const currentTrip = activeTripRef.current;
+    if (!activeTripId || !currentTrip) return;
+
+    const normalizedPatch = { ...patch };
+    if (Object.prototype.hasOwnProperty.call(normalizedPatch, "imageUrl")) {
+      normalizedPatch.coverImage = normalizedPatch.imageUrl;
+      delete normalizedPatch.imageUrl;
+    }
+    const updatedAt = new Date().toISOString();
+    const updatedTrip = {
+      ...currentTrip,
+      ...normalizedPatch,
+      updatedAt,
+    };
+
+    activeTripRef.current = updatedTrip;
     setTrips((currentTrips) =>
       currentTrips.map((trip) =>
         trip.id === activeTripId
-          ? { ...trip, ...patch, updatedAt: new Date().toISOString() }
+          ? { ...trip, ...normalizedPatch, updatedAt }
           : trip
       )
     );
+
+    if (metaSaveTimeoutRef.current) {
+      clearTimeout(metaSaveTimeoutRef.current);
+      metaSaveTimeoutRef.current = null;
+    }
+
+    if (storageMode === "local") {
+      upsertTripMetaLocal(updatedTrip);
+      return;
+    }
+
+    if (storageMode !== "online" || !isSignedIn || !user?.id) return;
+
+    const runMetaSave = async () => {
+      const latestTrip = activeTripRef.current;
+      const latestMode = useItineraryStore.getState().ui.storageMode;
+
+      if (!latestTrip || latestTrip.id !== updatedTrip.id) return;
+      if (latestMode !== "online") return;
+
+      if (savingRef.current) {
+        metaSaveTimeoutRef.current = setTimeout(runMetaSave, 1000);
+        return;
+      }
+
+      await performSave({ silent: true, tripOverride: latestTrip });
+    };
+
+    metaSaveTimeoutRef.current = setTimeout(runMetaSave, 900);
   };
 
-  const performSave = async ({ silent = false } = {}) => {
-    if (!activeTrip || savingRef.current) return;
+  const handleUpdateTripVisibility = async (nextIsPublic) => {
+    if (!activeTrip) {
+      return { ok: false, error: new Error("No hay viaje activo.") };
+    }
+
+    if (storageMode !== "online") {
+      return {
+        ok: false,
+        error: new Error("Los viajes públicos necesitan modo Online."),
+      };
+    }
+
+    if (!isSignedIn || !user?.id) {
+      return {
+        ok: false,
+        error: new Error("Inicia sesión para publicar un viaje."),
+      };
+    }
+
+    if (activeTrip.ownerUserId && activeTrip.ownerUserId !== user.id) {
+      return {
+        ok: false,
+        error: new Error("Solo el dueño puede publicar este viaje."),
+      };
+    }
+
+    if (savingRef.current) {
+      return {
+        ok: false,
+        error: new Error("Espera a que termine el guardado actual."),
+      };
+    }
+
+    let data;
+    try {
+      data = stripBase64FromExport(JSON.parse(exportJSON()));
+    } catch (error) {
+      console.error("Bad exportJSON", error);
+      return {
+        ok: false,
+        error: new Error("No se pudo preparar el viaje para publicarlo."),
+      };
+    }
+
+    savingRef.current = true;
+    setSaveState("saving");
+    setSaveMessage("Guardando visibilidad...");
+
+    setTrips((currentTrips) =>
+      currentTrips.map((trip) =>
+        trip.id === activeTrip.id
+          ? {
+              ...trip,
+              data,
+              isPublic: Boolean(nextIsPublic),
+              updatedAt: new Date().toISOString(),
+            }
+          : trip
+      )
+    );
+
+    try {
+      const saveResult = await saveTripOnline({
+        tripId: activeTrip.id,
+        userId: user.id,
+        ownerUserId: activeTrip.ownerUserId || user.id,
+        sharedWithUserIds: activeTrip.sharedWithUserIds || [],
+        isPublic: Boolean(nextIsPublic),
+        data,
+        title: activeTrip.title,
+        destination: activeTrip.destination,
+        imageUrl: activeTrip.coverImage,
+      });
+
+      if (!saveResult.ok) {
+        setTrips((currentTrips) =>
+          currentTrips.map((trip) =>
+            trip.id === activeTrip.id
+              ? { ...trip, isPublic: Boolean(activeTrip.isPublic) }
+              : trip
+          )
+        );
+        setSaveState("error");
+        setSaveMessage("Error al guardar");
+        return {
+          ok: false,
+          error: saveResult.error || new Error("No se pudo guardar el viaje."),
+        };
+      }
+
+      const visibilityResult = await updateTripVisibilityOnline({
+        tripId: activeTrip.id,
+        userId: user.id,
+        isPublic: Boolean(nextIsPublic),
+      });
+
+      if (!visibilityResult.ok) {
+        setTrips((currentTrips) =>
+          currentTrips.map((trip) =>
+            trip.id === activeTrip.id
+              ? { ...trip, isPublic: Boolean(activeTrip.isPublic) }
+              : trip
+          )
+        );
+        setSaveState("error");
+        setSaveMessage("Error al publicar");
+        return {
+          ok: false,
+          error:
+            visibilityResult.error ||
+            new Error("No se pudo actualizar la visibilidad."),
+        };
+      }
+
+      const updatedTrip = {
+        ...visibilityResult.trip,
+        data,
+        title: activeTrip.title,
+        destination: activeTrip.destination,
+        coverImage: activeTrip.coverImage,
+        sharedWithUserIds: activeTrip.sharedWithUserIds || [],
+      };
+
+      activeTripRef.current = updatedTrip;
+      setTrips((currentTrips) =>
+        currentTrips.map((trip) =>
+          trip.id === activeTrip.id ? updatedTrip : trip
+        )
+      );
+      setPublicTripsRefreshKey((key) => key + 1);
+      setSaveState("saved");
+      setSaveMessage("Guardado");
+
+      return { ok: true };
+    } finally {
+      savingRef.current = false;
+      setTimeout(() => {
+        setSaveState("idle");
+        setSaveMessage("");
+      }, 1800);
+    }
+  };
+
+  async function performSave({ silent = false, tripOverride = null } = {}) {
+    const tripToSave = tripOverride || activeTripRef.current;
+    if (!tripToSave || savingRef.current) return false;
+
+    if (metaSaveTimeoutRef.current) {
+      clearTimeout(metaSaveTimeoutRef.current);
+      metaSaveTimeoutRef.current = null;
+    }
 
     savingRef.current = true;
     setSaveState("saving");
@@ -308,24 +624,35 @@ export default function App({ auth }) {
           tone: "danger",
         });
       }
-      return;
+      return false;
     }
 
+    const updatedAt = new Date().toISOString();
     setTrips((currentTrips) =>
       currentTrips.map((trip) =>
-        trip.id === activeTrip.id
-          ? { ...trip, data, updatedAt: new Date().toISOString() }
+        trip.id === tripToSave.id
+          ? {
+              ...trip,
+              title: tripToSave.title,
+              destination: tripToSave.destination,
+              coverImage: tripToSave.coverImage,
+              sharedWithUserIds: tripToSave.sharedWithUserIds || [],
+              isPublic: Boolean(tripToSave.isPublic),
+              data,
+              updatedAt,
+            }
           : trip
       )
     );
 
     try {
       if (storageMode === "local") {
-        saveTripLocal(activeTrip.id, data);
+        saveTripLocal(tripToSave.id, data);
+        upsertTripMetaLocal({ ...tripToSave, data, updatedAt });
         setSaveState("saved");
         setSaveMessage("Guardado");
         if (!silent) toast({ title: "Guardado local", tone: "success" });
-        return;
+        return true;
       }
 
       if (!isSignedIn || !user?.id) {
@@ -338,18 +665,19 @@ export default function App({ auth }) {
             tone: "warning",
           });
         }
-        return;
+        return false;
       }
 
       const result = await saveTripOnline({
-        tripId: activeTrip.id,
+        tripId: tripToSave.id,
         userId: user.id,
-        ownerUserId: activeTrip.ownerUserId || user.id,
-        sharedWithUserIds: activeTrip.sharedWithUserIds || [],
+        ownerUserId: tripToSave.ownerUserId || user.id,
+        sharedWithUserIds: tripToSave.sharedWithUserIds || [],
+        isPublic: Boolean(tripToSave.isPublic),
         data,
-        title: activeTrip.title,
-        destination: activeTrip.destination,
-        imageUrl: activeTrip.coverImage,
+        title: tripToSave.title,
+        destination: tripToSave.destination,
+        imageUrl: tripToSave.coverImage,
       });
 
       if (!result.ok) {
@@ -364,11 +692,12 @@ export default function App({ auth }) {
         } else {
           console.error("[Autosave] Error guardando", result.error);
         }
-        return;
+        return false;
       }
 
       setSaveState("saved");
       setSaveMessage("Guardado");
+      return true;
     } finally {
       savingRef.current = false;
       setTimeout(() => {
@@ -376,20 +705,31 @@ export default function App({ auth }) {
         setSaveMessage("");
       }, 1800);
     }
-  };
+  }
 
   useEffect(() => {
     if (!activeTrip) return;
     if (storageMode !== "online") return;
     if (!isSignedIn || !user?.id) return;
+    if (autoSaveEnabled === false) return;
+
+    const intervalMs =
+      Math.max(1, Number(autoSaveIntervalMin) || 3) * 60 * 1000;
 
     const interval = setInterval(() => {
       performSave({ silent: true });
-    }, 30000);
+    }, intervalMs);
 
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTripId, storageMode, isSignedIn, user?.id]);
+  }, [
+    activeTripId,
+    autoSaveEnabled,
+    autoSaveIntervalMin,
+    storageMode,
+    isSignedIn,
+    user?.id,
+  ]);
 
   return (
     <div className="h-screen w-screen p-3">
@@ -404,6 +744,13 @@ export default function App({ auth }) {
         </div>
       ) : !canEnter ? (
         <EntryScreen onGuest={() => setGuest(true)} hasClerk={hasClerk} />
+      ) : activePublicTrip ? (
+        <PublicTripPage
+          payload={{ trip: activePublicTrip, data: activePublicTrip.data || {} }}
+          onBack={() => setActivePublicTrip(null)}
+          onCopy={() => handleDuplicateTrip(activePublicTrip, { openCopy: true })}
+          copyDisabled={duplicatingTripId === activePublicTrip.id}
+        />
       ) : activeTrip ? (
         <PlannerShell
           trip={activeTrip}
@@ -414,13 +761,18 @@ export default function App({ auth }) {
           saveState={saveState}
           saveMessage={saveMessage}
           onUpdateTripMeta={handleUpdateTripMeta}
+          onUpdateTripVisibility={handleUpdateTripVisibility}
         />
       ) : (
         <LandingPage
           trips={trips}
+          publicTrips={publicTrips}
           loading={loadingTrips}
+          loadingPublic={loadingPublicTrips}
           error={tripsError}
+          publicError={publicTripsError}
           onEnterTrip={handleEnterTrip}
+          onEnterPublicTrip={(trip) => setActivePublicTrip(trip)}
           onAddTrip={handleAddTrip}
           onDuplicateTrip={handleDuplicateTrip}
           duplicatingTripId={duplicatingTripId}

@@ -118,7 +118,7 @@ export default function DaySelector() {
   };
 
   return (
-    <div className="day-selector">
+    <div className="day-selector" data-tour="day-selector">
       <div className="section-heading">
         <div>
           <h2 className="font-semibold">Días del viaje</h2>
@@ -137,6 +137,7 @@ export default function DaySelector() {
           className="input day-select"
           value={selectedDate}
           onChange={(e) => setSelectedDate(e.target.value)}
+          data-tour="day-select"
           title="Selecciona el día del itinerario"
         >
           {days.map((d) => {
@@ -152,7 +153,7 @@ export default function DaySelector() {
           })}
         </select>
 
-        <div className="day-icon-actions">
+        <div className="day-icon-actions" data-tour="day-actions">
           <button
             className="icon-button"
             onClick={() => setDialog("create")}
@@ -181,7 +182,7 @@ export default function DaySelector() {
         </div>
       </div>
 
-      <label className="day-title-field">
+      <label className="day-title-field" data-tour="day-title-field">
         <span className="text-xs">Título del día</span>
         <input
           className="input"

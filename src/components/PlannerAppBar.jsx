@@ -9,6 +9,7 @@ export default function PlannerAppBar({
   hasClerk,
   onBack,
   onSaveNow,
+  onStartTour,
   saveState,
   saveMessage,
 }) {
@@ -16,14 +17,18 @@ export default function PlannerAppBar({
   const saving = saveState === "saving";
 
   return (
-    <header className="planner-appbar">
+    <header className="planner-appbar" data-tour="trip-appbar">
       <div className="planner-appbar-left">
-        <button className="planner-back-button" onClick={onBack}>
+        <button
+          className="planner-back-button"
+          onClick={onBack}
+          data-tour="trip-back"
+        >
           <span aria-hidden="true">←</span>
           <span>Mis viajes</span>
         </button>
 
-        <div className="planner-appbar-title-block">
+        <div className="planner-appbar-title-block" data-tour="trip-title">
           <div className="planner-appbar-trip-title">
             {trip?.title || "Sin título"}
           </div>
@@ -33,8 +38,23 @@ export default function PlannerAppBar({
         </div>
       </div>
 
-      <div className="planner-appbar-right">
-        <CurrencySelector compact />
+      <div className="planner-appbar-right" data-tour="trip-actions">
+        {onStartTour && (
+          <button
+            className="icon-button planner-help-button"
+            type="button"
+            onClick={onStartTour}
+            title="Tutorial del trip"
+            aria-label="Abrir tutorial del trip"
+            data-tour="trip-help-button"
+          >
+            ?
+          </button>
+        )}
+
+        <div data-tour="trip-currency">
+          <CurrencySelector compact />
+        </div>
 
         {saveMessage && (
           <span className="planner-appbar-status">{saveMessage}</span>
@@ -46,17 +66,22 @@ export default function PlannerAppBar({
             onClick={onSaveNow}
             disabled={saving}
             title="Guardar ahora"
+            data-tour="trip-save"
           >
             {saving ? "Guardando..." : "Guardar ahora"}
           </button>
         )}
 
-        <PdfExportButton trip={trip} />
+        <div data-tour="trip-pdf">
+          <PdfExportButton trip={trip} />
+        </div>
 
         {hasClerk && isSignedIn && (
-          <UserButton
-            appearance={{ elements: { avatarBox: { width: 34, height: 34 } } }}
-          />
+          <span data-tour="trip-account">
+            <UserButton
+              appearance={{ elements: { avatarBox: { width: 34, height: 34 } } }}
+            />
+          </span>
         )}
       </div>
     </header>

@@ -20,7 +20,12 @@ const NAV_ITEMS = [
   { id: "settings", label: "Configuración", short: "Config", icon: "..." },
 ];
 
-export default function Sidebar({ trip, currentUser, onUpdateTripMeta }) {
+export default function Sidebar({
+  trip,
+  currentUser,
+  onUpdateTripMeta,
+  onUpdateTripVisibility,
+}) {
   const ui = useItineraryStore((state) => state.ui);
   const setSidebarTab = useItineraryStore((state) => state.setSidebarTab);
   const storageMode = ui.storageMode || "online";
@@ -69,7 +74,12 @@ export default function Sidebar({ trip, currentUser, onUpdateTripMeta }) {
           ))}
         </select>
 
-        <div className="sidebar-tabs" role="tablist" aria-label="Secciones">
+        <div
+          className="sidebar-tabs"
+          role="tablist"
+          aria-label="Secciones"
+          data-tour="sidebar-tabs"
+        >
           {NAV_ITEMS.map((item) => (
             <button
               key={item.id}
@@ -97,7 +107,7 @@ export default function Sidebar({ trip, currentUser, onUpdateTripMeta }) {
       </div>
 
       {activeTab === "itinerary" && (
-        <div className="sidebar-pane">
+        <div className="sidebar-pane" data-tour="itinerary-panel">
           <section className="workspace-section">
             <DaySelector />
           </section>
@@ -147,6 +157,7 @@ export default function Sidebar({ trip, currentUser, onUpdateTripMeta }) {
             trip={trip}
             currentUser={currentUser}
             onUpdateTripMeta={onUpdateTripMeta}
+            onUpdateTripVisibility={onUpdateTripVisibility}
           />
         </section>
       )}

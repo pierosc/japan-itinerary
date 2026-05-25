@@ -15,7 +15,7 @@ export default function FinancePanel({ trip, currentUser }) {
   }, [setFinanceOpen]);
 
   return (
-    <div className="card">
+    <div className="card" data-tour="finance-panel">
       <div
         className="flex"
         style={{ justifyContent: "space-between", alignItems: "center" }}

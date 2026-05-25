@@ -25,7 +25,7 @@ export default function BudgetSummary() {
   const tripFX = tripJPY * (currency.ratePerJPY || 0);
 
   return (
-    <>
+    <div data-tour="budget-summary">
       <h2 className="font-semibold mb-2">Gastos</h2>
       <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <div className="card">
@@ -43,6 +43,6 @@ export default function BudgetSummary() {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

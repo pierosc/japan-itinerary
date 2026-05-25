@@ -28,6 +28,7 @@ function normalizeTripRow(row) {
     data: row.data || null,
     ownerUserId: row.user_id || null,
     sharedWithUserIds: row.shared_with_user_ids || [],
+    isPublic: Boolean(row.is_public),
   };
 }
 
@@ -51,12 +52,18 @@ async function callTripsApi(method, body) {
   return payload;
 }
 
-async function fetchTripsWithPostgrest(userId) {
+const TRIP_SELECT_WITH_VISIBILITY =
+  "trip_id, title, destination, image_url, updated_at, data, user_id, shared_with_user_ids, is_public";
+const TRIP_SELECT_BASIC =
+  "trip_id, title, destination, image_url, updated_at, data, user_id, shared_with_user_ids";
+
+async function fetchTripsWithPostgrest(
+  userId,
+  selectColumns = TRIP_SELECT_WITH_VISIBILITY
+) {
   const { data, error } = await supabase
     .from("trip_data")
-    .select(
-      "trip_id, title, destination, image_url, updated_at, data, user_id, shared_with_user_ids"
-    )
+    .select(selectColumns)
     .or(`user_id.eq.${userId},shared_with_user_ids.cs.{${userId}}`)
     .order("updated_at", { ascending: false });
 
@@ -64,22 +71,55 @@ async function fetchTripsWithPostgrest(userId) {
   return { trips: (data || []).map(normalizeTripRow) };
 }
 
+function normalizeTripListPayload(payload) {
+  return {
+    ...payload,
+    trips: (payload.trips || []).map((trip) => ({
+      ...trip,
+      isPublic: Boolean(trip.isPublic ?? trip.is_public),
+    })),
+  };
+}
+
 export async function fetchTripsOnline(userId) {
   if (!supabase) return { ok: false, error: missingSupabaseError() };
   if (!userId) return { ok: false, error: new Error("Missing userId") };
 
   try {
-    return { ok: true, ...(await callTripsApi("GET")) };
-  } catch (edgeError) {
+    return { ok: true, ...(await fetchTripsWithPostgrest(userId)) };
+  } catch (postgrestError) {
     try {
-      return { ok: true, ...(await fetchTripsWithPostgrest(userId)) };
-    } catch (postgrestError) {
       return {
-        ok: false,
-        error: normalizeSupabaseError(edgeError || postgrestError),
+        ok: true,
+        ...(await fetchTripsWithPostgrest(userId, TRIP_SELECT_BASIC)),
       };
+    } catch {
+      try {
+        return {
+          ok: true,
+          ...normalizeTripListPayload(await callTripsApi("GET")),
+        };
+      } catch (edgeError) {
+        return {
+          ok: false,
+          error: normalizeSupabaseError(edgeError || postgrestError),
+        };
+      }
     }
   }
+}
+
+export async function fetchPublicTripsOnline() {
+  if (!supabase) return { ok: false, error: missingSupabaseError() };
+
+  const { data, error } = await supabase
+    .from("trip_data")
+    .select(TRIP_SELECT_WITH_VISIBILITY)
+    .eq("is_public", true)
+    .order("updated_at", { ascending: false });
+
+  if (error) return { ok: false, error: normalizeSupabaseError(error) };
+  return { ok: true, trips: (data || []).map(normalizeTripRow) };
 }
 
 export async function saveTripOnline({
@@ -87,6 +127,7 @@ export async function saveTripOnline({
   userId,
   ownerUserId,
   sharedWithUserIds = [],
+  isPublic = false,
   data,
   title,
   destination,
@@ -101,6 +142,7 @@ export async function saveTripOnline({
       userId,
       ownerUserId,
       sharedWithUserIds,
+      isPublic,
       data,
       title,
       destination,
@@ -111,4 +153,28 @@ export async function saveTripOnline({
   } catch (error) {
     return { ok: false, error: normalizeSupabaseError(error) };
   }
+}
+
+export async function updateTripVisibilityOnline({ tripId, userId, isPublic }) {
+  if (!supabase) return { ok: false, error: missingSupabaseError() };
+  if (!tripId) return { ok: false, error: new Error("Missing tripId") };
+  if (!userId) return { ok: false, error: new Error("Missing userId") };
+
+  const { data, error } = await supabase
+    .from("trip_data")
+    .update({ is_public: Boolean(isPublic) })
+    .eq("trip_id", tripId)
+    .eq("user_id", userId)
+    .select(TRIP_SELECT_WITH_VISIBILITY)
+    .maybeSingle();
+
+  if (error) return { ok: false, error: normalizeSupabaseError(error) };
+  if (!data) {
+    return {
+      ok: false,
+      error: new Error("Solo el dueño del viaje puede cambiar la visibilidad."),
+    };
+  }
+
+  return { ok: true, trip: normalizeTripRow(data) };
 }

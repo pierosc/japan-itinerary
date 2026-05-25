@@ -487,9 +487,9 @@ export const useItineraryStore = create((set, get) => ({
     mapTilerKey: "",
     sidebarTab: "itinerary", // itinerary | myplaces | finance | settings | users | packing
     theme: initialUIPrefs.theme || "light", // light por defecto
-    storageMode: "online", // "local" | "online" (online por defecto)
-    autoSaveEnabled: true,
-    autoSaveIntervalMin: 3,
+    storageMode: initialUIPrefs.storageMode || "online", // "local" | "online"
+    autoSaveEnabled: initialUIPrefs.autoSaveEnabled ?? true,
+    autoSaveIntervalMin: initialUIPrefs.autoSaveIntervalMin ?? 3,
   },
 
   // ====== Acciones UI ======
@@ -523,14 +523,21 @@ export const useItineraryStore = create((set, get) => ({
         },
       };
     }),
-  setStorageMode: (mode) =>
-    set((s) => ({ ui: { ...s.ui, storageMode: mode } })),
-  setAutoSaveEnabled: (v) =>
-    set((s) => ({ ui: { ...s.ui, autoSaveEnabled: v } })),
-  setAutoSaveInterval: (min) =>
+  setStorageMode: (mode) => {
+    saveUIPrefs({ storageMode: mode });
+    set((s) => ({ ui: { ...s.ui, storageMode: mode } }));
+  },
+  setAutoSaveEnabled: (v) => {
+    saveUIPrefs({ autoSaveEnabled: v });
+    set((s) => ({ ui: { ...s.ui, autoSaveEnabled: v } }));
+  },
+  setAutoSaveInterval: (min) => {
+    const autoSaveIntervalMin = Number(min) || 1;
+    saveUIPrefs({ autoSaveIntervalMin });
     set((s) => ({
-      ui: { ...s.ui, autoSaveIntervalMin: Number(min) || 1 },
-    })),
+      ui: { ...s.ui, autoSaveIntervalMin },
+    }));
+  },
 
   // ====== Días ======
   setSelectedDate: (date) => {

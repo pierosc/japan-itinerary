@@ -278,6 +278,14 @@ export default function MapPanel({ trip, currentUser }) {
   const [controlsCollapsed, setControlsCollapsed] = useState(false);
   const mapRef = useRef(null);
 
+  useEffect(() => {
+    const expandControls = () => setControlsCollapsed(false);
+    window.addEventListener("trip-tour:expand-map-controls", expandControls);
+    return () => {
+      window.removeEventListener("trip-tour:expand-map-controls", expandControls);
+    };
+  }, []);
+
   const bounds = useMemo(
     () => L.latLngBounds(JAPAN_BOUNDS.map(([a, b]) => [a, b])),
     []
@@ -387,6 +395,7 @@ export default function MapPanel({ trip, currentUser }) {
         className={`map-ui-overlay ${
           controlsCollapsed ? "map-ui-overlay--collapsed" : ""
         }`}
+        data-tour="map-tools"
       >
         <div className="map-overlay-header">
           <div className="map-overlay-title">

@@ -17,7 +17,7 @@ export default function CurrencyConverter() {
   const converted = (Number(jpy) || 0) * (currency.ratePerJPY || 0);
 
   return (
-    <>
+    <div data-tour="currency-converter">
       <h2 className="font-semibold mb-2">Convertidor de moneda</h2>
       <div
         className="grid"
@@ -90,6 +90,6 @@ export default function CurrencyConverter() {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

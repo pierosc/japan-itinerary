@@ -182,7 +182,7 @@ export default function UsersPanel({ trip, currentUser, onUpdateTripMeta }) {
   }
 
   return (
-    <div className="list-panel">
+    <div className="list-panel" data-tour="users-panel">
       <h2 className="font-semibold mb-2">Users</h2>
 
       <div className="item">
@@ -195,18 +195,19 @@ export default function UsersPanel({ trip, currentUser, onUpdateTripMeta }) {
         </div>
       </div>
 
-      {!supabase ? (
-        <div className="text-xs text-gray-600">Supabase no esta configurado.</div>
-      ) : !user?.id ? (
-        <div className="text-xs text-gray-600">
-          Inicia sesion para compartir viajes.
-        </div>
-      ) : (
-        <>
-          <div className="text-xs text-gray-600 mb-2">
-            Busca usuarios registrados y compartelos para que puedan editar el
-            mismo viaje.
+      <div data-tour="users-sharing">
+        {!supabase ? (
+          <div className="text-xs text-gray-600">Supabase no esta configurado.</div>
+        ) : !user?.id ? (
+          <div className="text-xs text-gray-600">
+            Inicia sesion para compartir viajes.
           </div>
+        ) : (
+          <>
+            <div className="text-xs text-gray-600 mb-2">
+              Busca usuarios registrados y compartelos para que puedan editar el
+              mismo viaje.
+            </div>
 
           {!isOwner && ownerUserId && (
             <div className="text-xs text-gray-600 mb-2">
@@ -311,8 +312,9 @@ export default function UsersPanel({ trip, currentUser, onUpdateTripMeta }) {
               </div>
             )}
           </div>
-        </>
-      )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

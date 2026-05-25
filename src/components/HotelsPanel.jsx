@@ -44,21 +44,21 @@ export default function HotelsPanel() {
   };
 
   return (
-    <div className="list-panel hotels-panel">
-      <div className="section-heading">
+    <div className="list-panel hotels-panel" data-tour="hotels-panel">
+      <div className="section-heading" data-tour="hotels-actions">
         <div>
           <h2 className="font-semibold">Hoteles</h2>
           <div className="text-xs">
             Bases del viaje para calcular cercania y punto de partida.
           </div>
         </div>
-        <button className="btn" onClick={handleAddHotel}>
+        <button className="btn" onClick={handleAddHotel} data-tour="hotels-add">
           + Hotel
         </button>
       </div>
 
       {!hotels.length ? (
-        <div className="empty-state empty-state--rich">
+        <div className="empty-state empty-state--rich" data-tour="hotels-list">
           <div className="empty-state-kicker">Base pendiente</div>
           <div className="font-medium">Agrega tu hotel o alojamiento</div>
           <div className="text-xs">
@@ -70,7 +70,7 @@ export default function HotelsPanel() {
           </button>
         </div>
       ) : (
-        <ul className="list scroll-list hotel-list">
+        <ul className="list scroll-list hotel-list" data-tour="hotels-list">
           {hotels.map((hotel) => (
             <li key={hotel.id} className="hotel-card">
               <div className="hotel-card-main">

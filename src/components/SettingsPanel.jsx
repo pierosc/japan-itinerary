@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useItineraryStore } from "../hooks/useItineraryStore";
 import { supabase } from "./lib/supabaseClient";
+import { useFeedback } from "./ui/FeedbackProvider";
 
 /**
  * Panel de configuración del viaje:
@@ -13,7 +14,13 @@ import { supabase } from "./lib/supabaseClient";
  * - Botón "Perfil público" (profiles.is_public)
  * - Toggle "Auto-guardado" (ui.autoSaveEnabled + ui.autoSaveIntervalMin)
  */
-export default function SettingsPanel({ trip, currentUser, onUpdateTripMeta }) {
+export default function SettingsPanel({
+  trip,
+  currentUser,
+  onUpdateTripMeta,
+  onUpdateTripVisibility,
+}) {
+  const { toast } = useFeedback();
   const ui = useItineraryStore((s) => s.ui);
   const setTheme = useItineraryStore((s) => s.setTheme);
   const setStorageMode = useItineraryStore((s) => s.setStorageMode);
@@ -34,9 +41,16 @@ export default function SettingsPanel({ trip, currentUser, onUpdateTripMeta }) {
   const [publicError, setPublicError] = useState(null);
   const [isPublic, setIsPublic] = useState(false);
   const [publicLoaded, setPublicLoaded] = useState(false);
+  const [tripPublicLoading, setTripPublicLoading] = useState(false);
+  const [tripPublicError, setTripPublicError] = useState(null);
 
   const theme = ui.theme || "light";
   const storageMode = ui.storageMode || "online";
+  const tripIsPublic = Boolean(trip?.isPublic);
+  const isTripOwner = Boolean(
+    isSignedIn && (!trip?.ownerUserId || trip.ownerUserId === user?.id)
+  );
+  const canPublishTrip = storageMode === "online" && isTripOwner;
 
   const myProfilePayload = useMemo(() => {
     if (!user) return null;
@@ -142,8 +156,37 @@ export default function SettingsPanel({ trip, currentUser, onUpdateTripMeta }) {
     }
   }
 
+  async function handleTripVisibilityToggle() {
+    setTripPublicError(null);
+
+    if (typeof onUpdateTripVisibility !== "function") {
+      setTripPublicError("No se encontró el guardado de visibilidad.");
+      return;
+    }
+
+    setTripPublicLoading(true);
+    const next = !tripIsPublic;
+    const result = await onUpdateTripVisibility(next);
+
+    if (result?.ok) {
+      toast({
+        title: next ? "Viaje publicado" : "Viaje privado",
+        message: next
+          ? "Ahora aparece en Viajes públicos como solo lectura."
+          : "Ya no aparece en Viajes públicos.",
+        tone: "success",
+      });
+    } else {
+      setTripPublicError(
+        result?.error?.message || "No se pudo cambiar la visibilidad."
+      );
+    }
+
+    setTripPublicLoading(false);
+  }
+
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3" data-tour="settings-panel">
       <div>
         <h2 className="font-semibold mb-1">Configuración del viaje</h2>
         <p className="text-xs text-gray-600">
@@ -153,7 +196,7 @@ export default function SettingsPanel({ trip, currentUser, onUpdateTripMeta }) {
       </div>
 
       {/* DATOS BÁSICOS */}
-      <section className="card" style={{ padding: 12 }}>
+      <section className="card" style={{ padding: 12 }} data-tour="settings-basic">
         <h3 className="font-semibold text-xs mb-2">Datos básicos</h3>
 
         <div
@@ -189,8 +232,8 @@ export default function SettingsPanel({ trip, currentUser, onUpdateTripMeta }) {
           URL de imagen (opcional)
           <input
             className="input mt-1"
-            value={trip.imageUrl || ""}
-            onChange={handleMetaChange("imageUrl")}
+            value={trip.coverImage || ""}
+            onChange={handleMetaChange("coverImage")}
             placeholder="https://…"
           />
         </label>
@@ -199,6 +242,70 @@ export default function SettingsPanel({ trip, currentUser, onUpdateTripMeta }) {
           Se usa en la tarjeta del viaje y en el app bar. No hace falta guardar
           manualmente: se actualiza al escribir.
         </p>
+      </section>
+
+      {/* VISIBILIDAD DEL VIAJE */}
+      <section className="card" style={{ padding: 12 }} data-tour="settings-sharing">
+        <h3 className="font-semibold text-xs mb-2">Visibilidad del viaje</h3>
+        <p className="text-xs text-gray-600 mb-2">
+          Haz que este viaje aparezca en Viajes públicos. Los demás usuarios
+          podrán verlo completo en modo solo lectura y crear una copia editable.
+        </p>
+
+        <div className="flex items-center justify-between gap-2">
+          <div style={{ minWidth: 0 }}>
+            <div className="font-medium" style={{ fontSize: 13 }}>
+              Viaje público
+            </div>
+            <div className="text-xs text-gray-600">
+              {tripIsPublic
+                ? "Visible para cualquier usuario"
+                : "Solo visible para ti y usuarios compartidos"}
+            </div>
+          </div>
+
+          <button
+            className={
+              "btn-outline text-xs " + (tripIsPublic ? "btn-active" : "")
+            }
+            disabled={tripPublicLoading || !canPublishTrip}
+            onClick={handleTripVisibilityToggle}
+            title={
+              storageMode !== "online"
+                ? "Cambia a modo Online para publicar"
+                : !isTripOwner
+                ? "Solo el dueño puede publicar este viaje"
+                : "Publicar / ocultar viaje"
+            }
+          >
+            {tripPublicLoading
+              ? "Guardando..."
+              : tripIsPublic
+              ? "Hacer privado"
+              : "Hacer público"}
+          </button>
+        </div>
+
+        {storageMode !== "online" && (
+          <div className="text-xs text-gray-600 mt-2">
+            Cambia a modo Online para publicar este viaje.
+          </div>
+        )}
+
+        {!isTripOwner && storageMode === "online" && (
+          <div className="text-xs text-gray-600 mt-2">
+            Solo el dueño del viaje puede cambiar esta opción.
+          </div>
+        )}
+
+        {tripPublicError && (
+          <div
+            className="text-xs"
+            style={{ color: "var(--danger)", marginTop: 8 }}
+          >
+            {tripPublicError}
+          </div>
+        )}
       </section>
 
       {/* PERFIL PUBLICO (para búsquedas y compartir) */}
@@ -263,7 +370,7 @@ export default function SettingsPanel({ trip, currentUser, onUpdateTripMeta }) {
       </section>
 
       {/* APARIENCIA */}
-      <section className="card" style={{ padding: 12 }}>
+      <section className="card" style={{ padding: 12 }} data-tour="settings-preferences">
         <h3 className="font-semibold text-xs mb-2">Apariencia</h3>
         <div className="flex gap-2">
           <button

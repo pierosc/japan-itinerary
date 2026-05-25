@@ -100,7 +100,7 @@ export default function ExpenseLedger({ trip, currentUser }) {
   };
 
   return (
-    <section className="card expense-ledger">
+    <section className="card expense-ledger" data-tour="expense-ledger">
       <div className="flex justify-between items-center">
         <h2 className="font-semibold mb-2">Gastos personales y compartidos</h2>
         <span className="text-xs">{tripExpenses.length} gastos</span>

@@ -367,11 +367,12 @@ export default function ItineraryList() {
   }
 
   return (
-    <div className="list-panel">
-      <div className="section-heading">
+    <div className="list-panel" data-tour="itinerary-panel">
+      <div className="section-heading" data-tour="itinerary-actions">
         <h2 className="font-semibold">Itinerario</h2>
         <button
           className="btn"
+          data-tour="itinerary-add-point"
           onClick={() =>
             addPlace({
               name: hasImageMap ? "Nuevo pin" : "Nuevo punto",
@@ -391,7 +392,7 @@ export default function ItineraryList() {
         </button>
       </div>
 
-      <div className="inline-add-panel">
+      <div className="inline-add-panel" data-tour="itinerary-inline-add">
         <div className="inline-add-row">
           <select
             className="input"
@@ -415,7 +416,7 @@ export default function ItineraryList() {
         </div>
       </div>
 
-      <div className="smart-order-panel">
+      <div className="smart-order-panel" data-tour="itinerary-smart-order">
         <div className="smart-order-header">
           <div>
             <div className="font-medium">Diagnostico del dia</div>
@@ -470,7 +471,7 @@ export default function ItineraryList() {
           items={idsForDnd}
           strategy={verticalListSortingStrategy}
         >
-          <ol className="list scroll-list">
+          <ol className="list scroll-list" data-tour="itinerary-list">
             {blocks.map((block) => {
               if (block.kind === "route") {
                 return (
